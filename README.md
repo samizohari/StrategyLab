@@ -1,4 +1,4 @@
-# GoldStrategy Lab — Gold Price Strategy Backtesting App
+# StrategyLab — Gold Price Strategy Backtesting App
 
 A professional-grade, **100% client-side** trading strategy backtesting application for gold (XAU/USD) data. Everything runs in a single HTML file in the browser; all data, users, logs and results live in `localStorage`. No server, no database, no build step.
 
@@ -138,7 +138,7 @@ Module boundaries mirror a conventional `js/app.js … utils.js` layout; the who
 ## Files
 
 ```
-gold-price-backtester/
+StrategyLab/
 ├── index.html              the complete application (single file)
 ├── sample-gold-data.csv    750 daily OHLCV bars for immediate testing
 └── README.md               this document

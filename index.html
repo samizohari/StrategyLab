@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark light">
-<title>GoldStrategy Lab — Gold Price Strategy Backtesting</title>
+<title>StrategyLab — Gold Price Strategy Backtesting</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <style>
-/* ============ GoldStrategy Lab — design system ============ */
+/* ============ StrategyLab — design system ============ */
 :root{
   --font:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
@@ -320,7 +320,7 @@ ul.clean{margin:8px 0;padding-left:20px}
   <div class="card glass login-card">
     <div class="login-hero">
       <div class="ring">Au</div>
-      <h1>GoldStrategy Lab</h1>
+      <h1>StrategyLab</h1>
       <p class="muted">Strategy backtesting for gold (XAU/USD) — 100% in your browser</p>
     </div>
     <div class="login-tabs">
@@ -385,7 +385,7 @@ ul.clean{margin:8px 0;padding-left:20px}
   <aside class="sidebar">
     <div class="brand">
       <div class="logo">Au</div>
-      <div><b>GoldStrategy Lab</b><small>Backtesting Suite</small></div>
+      <div><b>StrategyLab</b><small>Backtesting Suite</small></div>
     </div>
     <nav class="nav" id="navList"></nav>
     <div class="side-foot">Data &amp; settings stored locally.<br>v1.0.0 · localStorage only</div>
@@ -3111,7 +3111,7 @@ GPB.alerts=(function(){
       }
       if(trig&&a.lastStatus!==true){
         a.lastStatus=true; a.lastTrig=new Date().toISOString();
-        notify("GoldStrategy alert — "+a.name,msg);
+        notify("StrategyLab alert — "+a.name,msg);
         GPB.log.add("INFO",GPB.auth.current()?GPB.auth.current().id:"system","ALERT_TRIGGER",a.name+": "+msg);
         save(list());
       } else if(!trig&&a.lastStatus===true){ a.lastStatus=false; save(list()); }
@@ -3289,7 +3289,7 @@ GPB.views.reports={render:function(root){
     var out=document.getElementById("rp-out");
     var s=r.strategy||{};
     var m=r.metrics||{};
-    var h='<div class="card" style="margin-top:14px"><h3 style="border-bottom:2px solid var(--gold);padding-bottom:8px">GoldStrategy Lab — Backtest Report</h3>'+
+    var h='<div class="card" style="margin-top:14px"><h3 style="border-bottom:2px solid var(--gold);padding-bottom:8px">StrategyLab — Backtest Report</h3>'+
       '<div class="kv" style="margin-bottom:10px"><b>Strategy</b><span>'+$u.esc(s.name||"Portfolio")+'</span>'+
       '<b>Report generated</b><span>'+new Date().toLocaleString('en-GB')+'</span><b>User</b><span>'+$u.esc((GPB.auth.current()||{}).username||"—")+'</span>'+
       '<b>Period</b><span>'+(r.dateRange?$u.esc(r.dateRange.start)+" → "+$u.esc(r.dateRange.end)+" ("+r.dateRange.bars+" bars)":"—")+'</span>'+
@@ -3498,7 +3498,7 @@ GPB.views.admin={render:function(root){
       '<div class="drop" id="bk-drop">📂 Choose backup .json file<input type="file" id="bk-file" accept=".json"></div><div class="err-msg" id="bk-msg"></div></div></div>';
     body.innerHTML=h;
     document.getElementById("bk-out").onclick=function(){
-      var data={app:"GoldStrategyLab",version:GPB.VERSION,exportedAt:new Date().toISOString(),
+      var data={app:"StrategyLab",version:GPB.VERSION,exportedAt:new Date().toISOString(),
         users:$s.get(GPB.KEYS.users,[]),data:$s.get(GPB.KEYS.data,null),strategies:$s.get(GPB.KEYS.strat,[]),
         results:$s.get(GPB.KEYS.res,[]),settings:$s.get(GPB.KEYS.set,{}),logs:$s.get(GPB.KEYS.logs,[]),
         logArchive:$s.get(GPB.KEYS.logArc,[]),schedules:$s.get(GPB.KEYS.sched,[]),alerts:$s.get(GPB.KEYS.alerts,[])};
@@ -3512,7 +3512,7 @@ GPB.views.admin={render:function(root){
       var rd=new FileReader();
       rd.onload=function(){
         var obj=null; try{ obj=JSON.parse(rd.result); }catch(e){ document.getElementById("bk-msg").textContent="Invalid backup JSON: "+e.message; return; }
-        if(!obj||obj.app!=="GoldStrategyLab"){ document.getElementById("bk-msg").textContent="Not a GoldStrategyLab backup file."; return; }
+        if(!obj||obj.app!=="StrategyLab"){ document.getElementById("bk-msg").textContent="Not a StrategyLab backup file."; return; }
         GPB.ui.confirmDialog("Restore this backup? It will REPLACE all users, data, strategies, results and logs.",function(){
           var u=GPB.auth.current();
           try{
