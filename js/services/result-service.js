@@ -1,6 +1,7 @@
 /* services/result-service.js — result persistence (cap), removal and export builders */
 "use strict";
 import { U } from "../core/utils.js";
+import { computeMetrics, ddSeries } from "../domain/metrics.js";
 
 export class ResultService {
   constructor({ repo, settings, log }) {
@@ -8,8 +9,32 @@ export class ResultService {
     this.settings = settings;
     this.log = log;
   }
-  list() { return this.repo.all(); }
-  get(id) { return this.repo.byId(id); }
+
+  /** Self-healing: results written by older/buggy versions may carry null metrics.
+   *  Recompute from the stored equity curve + trade log whenever the metrics look
+   *  empty but the underlying data exists. Persisted once so every consumer
+   *  (dashboard, backtest, compare, risk, reports) sees real numbers. */
+  _normalize(r) {
+    if (!r || !r.metrics) return r;
+    const m = r.metrics;
+    const curve = r.equityCurve || [];
+    const trades = r.tradeLog || [];
+    const looksBroken = (m.totalReturn == null && (curve.length > 1 || trades.length > 0)) ||
+      ((curve.length > 1 || trades.length > 0) && m.totalTrades === 0 && trades.length > 0);
+    if (!looksBroken) return r;
+    const fresh = computeMetrics(curve, trades, r.initialCapital || 10000);
+    fresh.totalTrades = trades.length > 0 ? trades.length : (fresh.totalTrades || 0);
+    if (r.portfolio && r.children) fresh.totalTrades = r.children.reduce((a, c) => a + (c.trades || 0), 0);
+    fresh.winningTrades = trades.length ? fresh.winningTrades : (m.winningTrades || 0);
+    fresh.losingTrades = trades.length ? fresh.losingTrades : (m.losingTrades || 0);
+    r.metrics = fresh;
+    if (!r.drawdown || r.drawdown.length === 0) r.drawdown = U.downsample(ddSeries(curve), 3000);
+    this.repo.saveAll(this.repo.all().map(x => (x.id === r.id ? r : x)));
+    return r;
+  }
+
+  list() { return this.repo.all().map(r => this._normalize(r)); }
+  get(id) { const r = this.repo.byId(id); return r ? this._normalize(r) : null; }
   save(result) {
     let l = this.repo.all().filter(x => x.id !== result.id);
     l.unshift(result);
