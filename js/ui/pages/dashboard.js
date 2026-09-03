@@ -3,6 +3,7 @@
 import { startPage } from "../../app/page.js";
 import { U } from "../../core/utils.js";
 import { sma } from "../../domain/indicators.js";
+import { showStrategyHelp } from "../md.js";
 
 startPage("dashboard", {
   mount(container, view, { kit, charts, shared, user }) {
@@ -57,18 +58,53 @@ startPage("dashboard", {
     ], { title: "XAU/USD daily" });
 
     document.getElementById("dash-res").innerHTML = results.length
-      ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Strategy</th><th class="right">Return</th><th class="right">Trades</th><th>When</th></tr></thead><tbody>' +
+      ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Strategy</th><th class="right">Return</th><th class="right">Trades</th><th>When</th><th></th><th></th></tr></thead><tbody>' +
         results.slice(0, 6).map(r => {
           const m = r.metrics || {};
-          return '<tr style="cursor:pointer"><td>' + U.esc(r.strategy ? r.strategy.name : "Portfolio") + (r.portfolio ? ' <span class="badge gold">PF</span>' : "") +
+          const delBtn = '<button class="btn btn-sm btn-ghost" data-del="' + r.id + '" style="padding:1px 7px;font-size:12px">✕</button>';
+          const helpBtn = r.portfolio || !r.strategyId
+            ? '<td></td>'
+            : '<td><button class="btn btn-sm btn-ghost" data-rhelp="' + r.id + '" title="Strategy help (Markdown popup)" style="padding:1px 7px;font-size:12px">ℹ</button></td>';
+          return '<tr style="cursor:pointer" data-id="' + r.id + '"><td>' + U.esc(r.strategy ? r.strategy.name : "Portfolio") + (r.portfolio ? ' <span class="badge gold">PF</span>' : "") +
             '</td><td class="right ' + ((m.totalReturn || 0) >= 0 ? "pos" : "neg") + '">' + U.signPct(m.totalReturn) +
-            '</td><td class="right">' + (m.totalTrades || 0) + '</td><td class="muted">' + U.fmtDate(r.timestamp) + "</td></tr>";
+            '</td><td class="right">' + (m.totalTrades || 0) + '</td><td class="muted">' + U.fmtDate(r.timestamp) + "</td>" + helpBtn +
+            '</td><td style="text-align:right">' + delBtn + "</td></tr>";
         }).join("") + "</tbody></table></div>"
       : "<div class='empty'><div class='big'>▤</div>No results yet" + (isAnalyst ? " — run a backtest from the Backtest Lab" : "") + "</div>";
-    const resRows = document.querySelectorAll("#dash-res tr");
-    resRows.forEach((tr, i) => {
-      tr.addEventListener("click", () => { location.href = "backtest.html?result=" + encodeURIComponent(results[i].id); });
+    const resRows = document.querySelectorAll("#dash-res tr[data-id]");
+    resRows.forEach(tr => {
+      tr.addEventListener("click", ev => {
+        if (ev.target.closest("[data-del]") || ev.target.closest("[data-rhelp]")) return;
+        location.href = "backtest.html?result=" + encodeURIComponent(tr.getAttribute("data-id"));
+      });
     });
+    document.querySelectorAll("#dash-res [data-del]").forEach(bn => bn.addEventListener("click", ev => {
+      ev.stopPropagation();
+      const id = bn.getAttribute("data-del");
+      const r = container.results.get(id);
+      if (r) {
+        kit.confirmDialog("Delete this saved result?", () => {
+          container.results.remove(id);
+          container.log.add("INFO", container.actorId(), "RESULT_DELETE", "Deleted result " + id);
+          kit.toast("Result deleted", "ok", "Results");
+          location.reload();
+        }, { danger: true, yesLabel: "Delete" });
+      }
+    }));
+    document.querySelectorAll("#dash-res [data-rhelp]").forEach(bn => bn.addEventListener("click", ev => {
+      ev.stopPropagation();
+      const r = container.results.get(bn.getAttribute("data-rhelp"));
+      if (!r) return;
+      const live = r.strategyId ? container.strategies.byId(r.strategyId) : null;
+      const target = live || (() => {
+        const st = r.strategy || {};
+        return { id: st.id || null, name: st.name || "Strategy", desc: "",
+          strategyLogic: st.logic || { type: "MA_CROSS", params: {} },
+          riskManagement: st.rm || {}, capitalManagement: st.cm || {},
+          combine: st.combine || { enabled: false }, helpMd: null };
+      })();
+      showStrategyHelp({ kit, strategy: target, resolveName: id => { const m = container.strategies.byId(id); return m ? m.name : null; } });
+    }));
 
     document.getElementById("dash-strats").innerHTML = strategies.length
       ? strategies.map(s => {
