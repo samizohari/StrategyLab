@@ -10,6 +10,7 @@ const NAV = [
   { id: "backtest", label: "Backtest Lab", ic: "▶", group: "Trading", kbd: "4", roles: ["ADMIN", "ANALYST"] },
   { id: "compare", label: "Comparison", ic: "≋", group: "Analysis", kbd: "5", roles: ["ADMIN", "ANALYST", "VIEWER"] },
   { id: "optimize", label: "Optimizer", ic: "◎", group: "Analysis", kbd: "6", roles: ["ADMIN", "ANALYST"] },
+  { id: "advisor", label: "AI Advisor", ic: "✨", group: "Analysis", kbd: "", roles: ["ADMIN", "ANALYST"] },
   { id: "scenarios", label: "Scenario Analysis", ic: "◈", group: "Analysis", kbd: "7", roles: ["ADMIN", "ANALYST"] },
   { id: "risk", label: "Risk Dashboard", ic: "▲", group: "Analysis", kbd: "8", roles: ["ADMIN", "ANALYST", "VIEWER"] },
   { id: "alerts", label: "Alerts", ic: "🔔", group: "Automation", kbd: "9", roles: ["ADMIN", "ANALYST"] },

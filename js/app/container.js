@@ -19,6 +19,8 @@ import { AnalysisService } from "../services/analysis-service.js";
 import { OptimizerService } from "../services/optimizer-service.js";
 import { AlertService } from "../services/alert-service.js";
 import { ScheduleService } from "../services/schedule-service.js";
+import { AdvisorService } from "../services/advisor-service.js";
+import { OpenAiCompatibleProvider } from "../services/ai-provider.js";
 
 /** buildContainer({main?, session?}) -> container
  *  main/session: StorePort instances. Defaults: browser localStorage/sessionStorage. */
@@ -55,11 +57,14 @@ export function buildContainer(opts) {
   const optimizer = new OptimizerService({ strategies, backtest, market });
   const alerts = new AlertService({ repo: repos.alerts, log, ids, market, notify: null });
   const schedules = new ScheduleService({ repo: repos.schedules, strategies, results, backtest, market, log, ids });
+  const advisor = new AdvisorService({ market, strategies, results, ids, clock });
+  const ai = new OpenAiCompatibleProvider({ settings, log });
 
   const container = {
     stores: { main: mainStore, session: sessionStore },
     repos, settings, log, ids, clock, ip,
     auth, market, strategies, backtest, results, analysis, optimizer, alerts, schedules,
+    advisor, ai,
 
     /** Notification port — UI adapters register themselves (inversion of control). */
     bindNotify(port) { alerts.notifyPort = port; },

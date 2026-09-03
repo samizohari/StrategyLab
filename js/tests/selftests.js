@@ -9,6 +9,7 @@ import { regimes } from "../domain/regime.js";
 import { computeMetrics } from "../domain/metrics.js";
 import { U } from "../core/utils.js";
 import { createStrategy } from "../domain/entities.js";
+import { parseLLMJSON } from "../services/ai-provider.js";
 
 function mkBars(closes, opts) {
   opts = opts || {};
@@ -237,6 +238,35 @@ export function runAll(container) {
     } finally {
       container.strategies.repo.save(list.slice(0, len));
     }
+  });
+  run("LLM JSON parser: fenced + trailing prose", () => {
+    const txt = "Sure! Here you go:\n```json\n{\"name\":\"A\",\"strategyLogic\":{\"type\":\"RSI\",\"params\":{}}}\n```\nGood luck!";
+    const p = parseLLMJSON(txt);
+    if (!p.ok) throw new Error(p.error);
+    if (p.value.name !== "A" || p.value.strategyLogic.type !== "RSI") throw new Error("wrong parse");
+  });
+  run("LLM JSON parser: nested strings with braces", () => {
+    const p = parseLLMJSON('{"name":"x","desc":"weird } brace","params":{"a":1}}');
+    if (!p.ok || p.value.params.a !== 1 || p.value.desc.indexOf("}") < 0) throw new Error("nested parse fail");
+  });
+  run("LLM JSON parser: garbage rejected", () => {
+    const p = parseLLMJSON("Sorry, I cannot do that.");
+    if (p.ok) throw new Error("should have failed");
+  });
+  run("Advisor: deterministic local recommendations", () => {
+    const recs1 = container.advisor.localRecommendations();
+    const recs2 = container.advisor.localRecommendations();
+    if (recs1.length < 2) throw new Error("too few recs: " + recs1.length);
+    if (JSON.stringify(recs1.map(r => r.draft.name)) !== JSON.stringify(recs2.map(r => r.draft.name))) throw new Error("not deterministic");
+    recs1.forEach(r => {
+      const errs = container.strategies.validate(r.draft);
+      if (errs.length) throw new Error(r.draft.name + ": " + errs.join(";"));
+    });
+  });
+  run("Advisor: tweak suggestions handle no-result", () => {
+    const s = container.strategies.all()[0];
+    const res = container.advisor.suggestTweaks(s.id);
+    if (!res.ok) throw new Error(res.msg);
   });
   run("Rate limiting: lock after 5 fails", () => {
     for (let i = 0; i < 5; i++) container.auth.login("viewer", "wrongpass1");

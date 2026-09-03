@@ -15,6 +15,7 @@ const PAGE_ROLES = {
   backtest: ["ADMIN", "ANALYST"],
   compare: ["ADMIN", "ANALYST", "VIEWER"],
   optimize: ["ADMIN", "ANALYST"],
+  advisor: ["ADMIN", "ANALYST"],
   scenarios: ["ADMIN", "ANALYST"],
   risk: ["ADMIN", "ANALYST", "VIEWER"],
   alerts: ["ADMIN", "ANALYST"],
@@ -26,7 +27,7 @@ const PAGE_ROLES = {
 
 const PAGE_TITLES = {
   dashboard: "Dashboard", data: "Market Data", strategies: "Strategies", backtest: "Backtest Lab",
-  compare: "Comparison", optimize: "Optimizer", scenarios: "Scenario Analysis", risk: "Risk Dashboard",
+  compare: "Comparison", optimize: "Optimizer", advisor: "AI Advisor", scenarios: "Scenario Analysis", risk: "Risk Dashboard",
   alerts: "Alerts", reports: "Reports & Export", scheduler: "Scheduled Runs", logs: "System Logs", admin: "Admin Panel"
 };
 
