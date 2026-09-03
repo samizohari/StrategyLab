@@ -35,6 +35,10 @@ startPage("compare", {
       const out = document.getElementById("cmp-out");
       if (!ids.length) { out.innerHTML = "<div class='empty'>Select at least one result.</div>"; return; }
       const rs = ids.map(id => container.results.get(id)).filter(Boolean);
+      if (rs.some(r => !r.metrics || typeof r.metrics !== "object")) {
+        // defensive: very old/broken results get an explicit marker instead of silent blanks
+        rs.forEach(r => { if (!r.metrics || typeof r.metrics !== "object") r.metrics = {}; });
+      }
       const pal = charts.colors().pal;
       let h = "";
       const defs = [

@@ -240,8 +240,8 @@ table.tbl{width:100%;border-collapse:collapse;font-size:12.8px;min-width:560px}
 .wiz-step .ln{width:26px;height:1px;background:var(--line)}
 /* ===== misc ===== */
 .chart-box{position:relative;width:100%}
-.chart-box canvas{max-height:380px}
-.chart-box.tall canvas{max-height:520px}
+.chart-box canvas{max-height:760px}
+.chart-box.tall canvas{max-height:1040px}
 .empty{padding:34px 16px;text-align:center;color:var(--ink-3)}
 .empty .big{font-size:34px;margin-bottom:8px}
 .heat{display:grid;gap:5px}

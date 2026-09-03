@@ -22,6 +22,24 @@ export function createShared({ container, kit, charts }) {
       "</div>";
   }
 
+  function pnlCardsHTML(r) {
+    const trades = r.tradeLog || [];
+    let net = 0, grossWin = 0, grossLoss = 0;
+    for (const t of trades) {
+      if (t.pnl >= 0) grossWin += t.pnl; else grossLoss += -t.pnl;
+      net += t.pnl;
+    }
+    const eqCurve = r.equityCurve || [];
+    const startEq = eqCurve.length ? eqCurve[0][1] : r.initialCapital || 0;
+    const endEq = eqCurve.length ? eqCurve[eqCurve.length - 1][1] : startEq;
+    const eqNet = endEq - startEq;
+    return '<div class="grid grid-3" style="margin-bottom:14px">' +
+      '<div class="card stat-card"><div class="lab">Net P&amp;L (trade log)</div><div class="val ' + (net >= 0 ? "pos" : "neg") + '">' + U.signMoney(net) + "</div></div>" +
+      '<div class="card stat-card"><div class="lab">Equity change ($)</div><div class="val ' + (eqNet >= 0 ? "pos" : "neg") + '">' + U.signMoney(eqNet) + "</div></div>" +
+      '<div class="card stat-card"><div class="lab">Gross profit / loss</div><div class="val" style="font-size:16px;margin-top:10px"><span class="pos">' + U.signMoney(grossWin) +
+      '</span> / <span class="neg">' + U.signMoney(-grossLoss) + "</span></div></div></div>";
+  }
+
   function equityCanvasHTML(prefix) {
     return '<div class="chart-box"><canvas id="' + prefix + '-eq"></canvas></div>' +
       '<div class="chart-box" style="margin-top:10px"><canvas id="' + prefix + '-dd"></canvas></div>';
@@ -94,6 +112,7 @@ export function createShared({ container, kit, charts }) {
       "<b>Capital</b><span>$" + U.num(r.initialCapital) + "</span>" +
       "<b>Run at</b><span>" + U.fmtDT(r.timestamp) + "</span></div>";
     html += metricCardsHTML(r.metrics);
+    html += pnlCardsHTML(r);
     html += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
       '<button class="btn btn-sm" data-act="trades">Trade log (' + (r.tradeLog ? r.tradeLog.length : 0) + ")</button>" +
       '<button class="btn btn-sm" data-act="csv">Export trades CSV</button>' +
@@ -111,7 +130,7 @@ export function createShared({ container, kit, charts }) {
   }
 
   return {
-    metricCardsHTML, equityCanvasHTML, drawCharts, tradesTableHTML,
+    metricCardsHTML, pnlCardsHTML, equityCanvasHTML, drawCharts, tradesTableHTML,
     showTrades, exportResultCSV, exportEquityCSV, exportReportJSON,
     deleteResult, renderResultDetail
   };

@@ -104,6 +104,9 @@ export function startPage(name, handlers) {
 
   const view = document.getElementById("view-root");
   document.title = (PAGE_TITLES[name] || name) + " — StrategyLab";
+  if (!charts.hasChart()) {
+    kit.toast("Chart.js CDN not reachable — interactive charts are disabled, tables still work. Check your connection or the Network tab.", "warn", "Charts offline");
+  }
   try {
     handlers.mount(container, view, { kit, charts, shared, user });
     if (user.mustChangePw) forcedChangePw(container, user, () => {

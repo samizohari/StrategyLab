@@ -40,6 +40,7 @@ startPage("reports", {
         "<b>Initial capital</b><span>$" + U.num(r.initialCapital) + "</span></div>" +
         '<p class="muted small" style="margin:0 0 12px">Logic: ' + U.esc(meta) + (s.combine && s.combine.enabled ? " · combined [" + U.esc(s.combine.logic) + "]" : "") + "</p></div>";
       h += shared.metricCardsHTML(m);
+      h += shared.pnlCardsHTML(r);
       h += '<div class="grid grid-2" style="margin-top:14px"><div class="card"><h3>Equity curve</h3><div class="chart-box"><canvas id="rp-eq"></canvas></div></div>' +
         '<div class="card"><h3>Drawdown</h3><div class="chart-box"><canvas id="rp-dd"></canvas></div></div></div>';
       const tr = r.tradeLog || [];
