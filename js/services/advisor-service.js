@@ -152,6 +152,14 @@ export class AdvisorService {
         { positionSizing: "risk", maxPositionPct: 50, compounding: true }),
       reasoning: "Classic MACD cross with balanced risk in any regime. Suggested capital split alongside a regime-specific pick."
     });
+    out.push({
+      kind: "Trendline structure trade (AI)",
+      draft: draft("AI: Trendline Rider", "TRENDLINE",
+        { lookback: 50, mode: "dual", minSlopePct: 0.01, bufferPct: 0 },
+        { stopType: "atr", stopATR: 2.2 * volAdjStop, tpType: "trail", trailActivate: 1.2, trailDist: 1.0 * volAdjStop, riskPerTrade: 1.2, maxDailyLoss: 4, maxConsecLosses: 3, pauseBars: 5 },
+        { positionSizing: "risk", maxPositionPct: 55, compounding: true }),
+      reasoning: "Rule: buy when price closes ABOVE the rising bullish trendline (regression of lows); sell when it closes BELOW the falling bearish trendline (regression of highs). Volatility " + m.volLabel + " (" + m.annVol + "% ann.) — the ATR stop is scaled to it, profit is trailed, 1.2% risk per trade."
+    });
     return out.map(r => Object.assign(r, { market: m.summary }));
   }
 

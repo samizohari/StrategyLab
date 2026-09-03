@@ -98,6 +98,22 @@ export class StrategyService {
     E.combine = { enabled: true, memberIds: [A.id, C.id], weights: {}, logic: "AND", threshold: 0, seqWindow: 5 };
     E.desc = "Combination: EMA crossover AND MACD cross must agree (consensus).";
     this.repo.save([A, B, C, D, E]);
+    this.ensureTrendlineSeed();
+  }
+
+  /** AI-created Trendline strategy (added once, even for existing installs). */
+  ensureTrendlineSeed() {
+    if (this.repo.all().some(s => s.strategyLogic && s.strategyLogic.type === "TRENDLINE")) return null;
+    const s = this.create("Trendline Follower (AI)", "TRENDLINE");
+    s.strategyLogic.params = { lookback: 50, mode: "dual", minSlopePct: 0.01, bufferPct: 0 };
+    s.riskManagement = { stopType: "atr", stopLoss: 2, stopATR: 2.2, tpType: "trail", takeProfit: 4, trailActivate: 1.2, trailDist: 1.0, riskPerTrade: 1.2, maxDailyLoss: 4, maxConsecLosses: 3, pauseBars: 5 };
+    s.capitalManagement = { initialCapital: 10000, positionSizing: "risk", positionSize: 10, fixedUnits: 10, maxPositionPct: 55, compounding: true, maxDrawdown: 25, feePct: 0 };
+    s.desc = "Buy when price closes above the rising bullish trendline (low regression); sell below the falling bearish trendline (high regression). Trendlines are rolling linear regressions; ATR stops + trailing profit.";
+    const all = this.repo.all();
+    all.push(s);
+    this.repo.save(all);
+    this.log.add("INFO", "system", "STRATEGY_CREATE", "AI-created Trendline Follower strategy added");
+    return s;
   }
 
   /** Lazy evaluator wired to this service's repository (dependency injection). */

@@ -3,7 +3,7 @@
    live browser container when launched from the Admin panel. */
 "use strict";
 import { sha256Hex, pwPolicy } from "../core/sha256.js";
-import { sma, ema, rsi, macd, bollinger, atr } from "../domain/indicators.js";
+import { sma, ema, rsi, macd, bollinger, atr, linregLine } from "../domain/indicators.js";
 import { parseCSV } from "../domain/series.js";
 import { regimes } from "../domain/regime.js";
 import { computeMetrics } from "../domain/metrics.js";
@@ -321,6 +321,58 @@ export function runAll(container) {
     if (!saved.ok) throw new Error(saved.errors.join(";"));
     if (!s.helpMd || s.helpMd.indexOf("# Auto Help") < 0) throw new Error("helpMd not generated on save");
     container.strategies.remove(s.id);
+  });
+  run("Trendline: linear regression fit", () => {
+    const vals = [];
+    for (let i = 0; i < 120; i++) vals.push(1000 + i * 1.5);
+    const lr = linregLine(vals, 60);
+    const last = lr.line[lr.line.length - 1];
+    if (Math.abs(last - vals[vals.length - 1]) > 1e-6) throw new Error("line end mismatch " + last);
+    if (!(lr.slope[lr.slope.length - 1] > 1.49 && lr.slope[lr.slope.length - 1] < 1.51)) throw new Error("slope wrong");
+  });
+  run("Engine: buy above bullish trendline (rising market)", () => {
+    const cs = [];
+    let p = 1000;
+    for (let i = 0; i < 220; i++) { p *= 1.0025; cs.push(p); }
+    const bars = mkBars(cs, { hw: 0.003, lw: 0.003 });
+    const s = simpleStrategy(container, {
+      strategyLogic: { type: "TRENDLINE", params: { lookback: 40, mode: "dual", minSlopePct: 0.005, bufferPct: 0 } },
+      riskManagement: { stopType: "pct", stopLoss: 1.5, tpType: "none", takeProfit: 4, riskPerTrade: 1, maxDailyLoss: 20, maxConsecLosses: 9, pauseBars: 1 },
+      capitalManagement: Object.assign({}, capital, { maxPositionPct: 50 })
+    });
+    const st = runSim(s, bars);
+    const longs = st.trades.filter(t => t.dir === 1);
+    const shorts = st.trades.filter(t => t.dir === -1);
+    if (!longs.length) throw new Error("no long trades in uptrend");
+    if (shorts.length) throw new Error("unexpected shorts in uptrend");
+  });
+  run("Engine: sell below bearish trendline (falling market)", () => {
+    const cs = [];
+    let p = 2000;
+    for (let i = 0; i < 220; i++) { p *= 0.9975; cs.push(p); }
+    const bars = mkBars(cs, { hw: 0.003, lw: 0.003 });
+    const s = simpleStrategy(container, {
+      strategyLogic: { type: "TRENDLINE", params: { lookback: 40, mode: "dual", minSlopePct: 0.005, bufferPct: 0 } },
+      riskManagement: { stopType: "pct", stopLoss: 1.5, tpType: "none", takeProfit: 4, riskPerTrade: 1, maxDailyLoss: 20, maxConsecLosses: 9, pauseBars: 1 },
+      capitalManagement: Object.assign({}, capital, { maxPositionPct: 50 })
+    });
+    const st = runSim(s, bars);
+    const shorts = st.trades.filter(t => t.dir === -1);
+    const longs = st.trades.filter(t => t.dir === 1);
+    if (!shorts.length) throw new Error("no short trades in downtrend");
+    if (longs.length) throw new Error("unexpected longs in downtrend");
+  });
+  run("Seeded Trendline Follower (AI) exists", () => {
+    const list = container.strategies.all();
+    const tl = list.filter(s => s.strategyLogic && s.strategyLogic.type === "TRENDLINE");
+    if (!tl.length) throw new Error("no TRENDLINE strategy seeded");
+    const byName = list.filter(s => s.name === "Trendline Follower (AI)");
+    if (!byName.length) throw new Error("named AI trendline missing");
+  });
+  run("Advisor recommends the trendline strategy", () => {
+    const recs = container.advisor.localRecommendations();
+    const hasTL = recs.some(r => r.draft.strategyLogic.type === "TRENDLINE");
+    if (!hasTL) throw new Error("trendline rec missing");
   });
   run("Rate limiting: lock after 5 fails", () => {
     for (let i = 0; i < 5; i++) container.auth.login("viewer", "wrongpass1");

@@ -106,7 +106,7 @@ The previous single-file build relied on a global `GPB` namespace; the modular b
 ## Features
 
 - **Data** — CSV/JSON import (flexible headers, dedupe, validation), manual bars, seeded demo generator, CSV export, date slicing, **Yahoo Finance live import** (any symbol, 1y–max daily history) with a Refresh button — direct calls are CORS-blocked, so the app auto-falls back to public CORS proxies (allorigins → corsproxy.io).
-- **Strategies** — 6-step wizard (type → logic → combination → risk → capital → review): MA cross (SMA/EMA), RSI, MACD, Bollinger, S/R breakout; param tooltips throughout.
+- **Strategies** — 7-step wizard (type → logic → combination → risk → capital → help → review): MA cross (SMA/EMA), RSI, MACD, Bollinger, S/R breakout, **Trendline** (buy above the rising bullish low-regression line, sell below the falling bearish high-regression line); param tooltips and Markdown help docs throughout.
 - **Combination engine** — AND consensus, OR, WEIGHTED vote (+threshold), SEQUENTIAL trigger/confirm.
 - **Risk rules** — fixed %/ATR stops, fixed %/trailing take-profit, risk-per-trade sizing, %-of-equity / fixed-units / Kelly sizing, position cap, max daily loss halt, consecutive-loss pause, drawdown halt, compounding, fees.
 - **Engine** — intrabar stops with conservative both-touch handling, signal-flip exits, same-bar re-entry cooldown, mark-to-market equity, trade log, async with progress/ETA; ~290k bars/s engine throughput; 10k+ bars comfortably.

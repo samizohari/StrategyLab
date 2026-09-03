@@ -49,6 +49,16 @@ export const LOGIC_META = {
       { key: "lookback", label: "Lookback bars", type: "number", min: 5, max: 300, step: 1, def: 20 },
       { key: "mode", label: "Mode", type: "select", opts: [["breakout", "Breakout"], ["bounce", "Bounce"]], def: "breakout" }
     ]
+  },
+  TRENDLINE: {
+    label: "Trendline (Support / Resistance)",
+    help: "Fits a rolling linear regression line to the lows (bullish support trendline) and to the highs (bearish resistance trendline). Buy when price closes above the rising bullish trendline; sell (short) when it closes below the falling bearish trendline.",
+    params: [
+      { key: "lookback", label: "Trendline lookback", type: "number", min: 10, max: 400, step: 1, def: 50, help: "Bars used for each linear regression fit." },
+      { key: "mode", label: "Mode", type: "select", opts: [["dual", "Dual (long + short)"], ["longonly", "Long only"]], def: "dual" },
+      { key: "minSlopePct", label: "Min slope (% per bar)", type: "number", min: 0, max: 0.5, step: 0.005, def: 0.01, help: "Support slope must exceed this (rising) to be treated as the bullish trendline; resistance slope must be below its negative to be treated as the bearish trendline." },
+      { key: "bufferPct", label: "Entry buffer (%)", type: "number", min: -2, max: 5, step: 0.1, def: 0, help: "Extra clearance above/below the trendline required to enter (negative = allow touch entries)." }
+    ]
   }
 };
 

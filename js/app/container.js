@@ -76,6 +76,7 @@ export function buildContainer(opts) {
       log.setMaxEntries(settings.get("logMaxEntries"));
       auth.seedDefaults();
       strategies.seedDefaults();
+      strategies.ensureTrendlineSeed();
       market.ensureDemo();
       return container;
     },

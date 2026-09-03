@@ -49,7 +49,7 @@ Given a market snapshot and optional user goal, design ONE trading strategy.
 Reply with ONLY a JSON object (no markdown fences, no commentary) shaped as:
 {
   "name": "Short descriptive name",
-  "strategyLogic": { "type": "MA_CROSS" | "RSI" | "MACD" | "BOLL" | "S_R_BREAK", "params": { ... } },
+  "strategyLogic": { "type": "MA_CROSS" | "RSI" | "MACD" | "BOLL" | "S_R_BREAK" | "TRENDLINE", "params": { ... } },
   "riskManagement": { "stopType": "pct" | "atr" | "none", "stopLoss": 2, "stopATR": 2, "tpType": "pct" | "trail" | "none", "takeProfit": 4, "trailActivate": 1.5, "trailDist": 1.2, "riskPerTrade": 1.0, "maxDailyLoss": 4, "maxConsecLosses": 3, "pauseBars": 5 },
   "capitalManagement": { "positionSizing": "risk" | "percentage" | "fixed" | "kelly", "positionSize": 10, "maxPositionPct": 50, "compounding": true, "maxDrawdown": 25, "feePct": 0 },
   "reasoning": "2-3 sentences: why this fits the regime, how you set the stop/target"
@@ -60,6 +60,7 @@ Parameter rules:
 - MACD params: fast, slow, signal, mode ("cross"|"hist"|"above"); fast < slow.
 - BOLL params: period, mult, mode ("breakout"|"reversion").
 - S_R_BREAK params: lookback, mode ("breakout"|"bounce").
+- TRENDLINE params: lookback, mode ("dual"|"longonly"), minSlopePct (0-0.5), bufferPct. Buy above the rising bullish trendline (regression of lows), sell below the falling bearish trendline (regression of highs).
 Keep numbers in valid ranges (stops 0.1-10%, take profit 0.1-20%, risk per trade 0.5-2%, maxDailyLoss 1-6%, maxDrawdown 10-40%). Prefer conservative values.`;
 
 export class OpenAiCompatibleProvider {

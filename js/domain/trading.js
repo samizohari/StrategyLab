@@ -2,7 +2,7 @@
    Member strategies are resolved through an injected resolver (dependency inversion),
    so this module never touches storage. */
 "use strict";
-import { sma, ema, rsi, macd, bollinger, atr } from "./indicators.js";
+import { sma, ema, rsi, macd, bollinger, atr, linregLine } from "./indicators.js";
 
 export function makeContext(bars) {
   const n = bars.length;
@@ -16,7 +16,8 @@ export function makeContext(bars) {
     getRSI: p => get("rsi" + p, () => rsi(closes, p)),
     getMACD: (f, s, g) => get("macd" + f + "_" + s + "_" + g, () => macd(closes, f, s, g)),
     getBB: (p, m) => get("bb" + p + "_" + m, () => bollinger(closes, p, m)),
-    getATR: p => get("atr" + p, () => atr(bars, p))
+    getATR: p => get("atr" + p, () => atr(bars, p)),
+    getLR: (kind, p) => get("lr" + kind + "_" + p, () => linregLine(kind === 0 ? lows : highs, p))
   };
 }
 
@@ -98,6 +99,30 @@ function evalBase(sl, ctx, i) {
       }
       if (c > res) return sig(1, (c - res) / res * 1000, "Resistance break up");
       if (c < sup) return sig(-1, (sup - c) / sup * 1000, "Support break down");
+      return ZERO;
+    }
+    case "TRENDLINE": {
+      const lb = Math.max(2, +p.lookback || 50);
+      if (i < lb + 1) return ZERO;
+      const sup = ctx.getLR(0, lb);   // linear regression of lows -> bullish support trendline
+      const res = ctx.getLR(1, lb);   // linear regression of highs -> bearish resistance trendline
+      const sL = sup.line[i], sS = sup.slope[i], sM = sup.mean[i];
+      const rL = res.line[i], rS = res.slope[i], rM = res.mean[i];
+      if (nan(sL) || nan(rL)) return ZERO;
+      const c = ctx.closes[i];
+      const minSlopeFrac = (+p.minSlopePct || 0.01) / 100;  // % per bar -> fraction
+      const buf = 1 + ((+p.bufferPct || 0) / 100);
+      const longOnly = p.mode === "longonly";
+      const sRel = sM > 0 ? sS / sM : 0;   // support slope relative to its level (per bar)
+      const rRel = rM > 0 ? rS / rM : 0;   // resistance slope relative to its level (per bar)
+      if (sRel > minSlopeFrac && c > sL * buf) {
+        // price above the RISING bullish trendline -> buy
+        return sig(1, (c - sL) / sL * 1000, "above bullish TL");
+      }
+      if (!longOnly && rRel < -minSlopeFrac && c < rL * buf) {
+        // price below the FALLING bearish trendline -> sell (short)
+        return sig(-1, (rL - c) / rL * 1000, "below bearish TL");
+      }
       return ZERO;
     }
   }
@@ -185,6 +210,7 @@ export function createEvaluator(deps) {
           case "MACD": w = Math.max(w, +p.slow + (sl.params.signal || 9) + 5); break;
           case "BOLL": w = Math.max(w, +p.period + 2); break;
           case "S_R_BREAK": w = Math.max(w, +p.lookback + 3); break;
+          case "TRENDLINE": w = Math.max(w, +p.lookback + 2); break;
         }
       }
       if (s.combine && s.combine.enabled) s.combine.memberIds.forEach(id => { w = Math.max(w, walk(resolve(id), seen)); });

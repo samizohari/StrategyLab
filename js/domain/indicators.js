@@ -99,4 +99,28 @@ export function atr(bars, p = 14) {
   return out;
 }
 
-export const Ind = { sma, ema, rsi, macd, bollinger, atr };
+
+export function linregLine(vals, p) {
+  const n = vals.length;
+  const line = new Array(n).fill(NaN);
+  const slope = new Array(n).fill(NaN);
+  const mean = new Array(n).fill(NaN);
+  const mX = (p - 1) / 2;
+  const denom = p * (p * p - 1) / 12; // sum (x - meanX)^2
+  for (let i = p - 1; i < n; i++) {
+    let sy = 0, sxy = 0;
+    for (let j = i - p + 1, k = 0; j <= i; j++, k++) {
+      sy += vals[j];
+      sxy += (k - mX) * vals[j];
+    }
+    const meanY = sy / p;
+    const b = sxy / denom;                 // slope per bar
+    const a = meanY - b * mX;
+    line[i] = a + b * (p - 1);             // fitted value at the right edge (current bar)
+    slope[i] = b;
+    mean[i] = meanY;
+  }
+  return { line, slope, mean };
+}
+
+export const Ind = { sma, ema, rsi, macd, bollinger, atr, linregLine };
