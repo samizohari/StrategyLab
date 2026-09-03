@@ -12,6 +12,21 @@ startPage("data", {
       '<div class="sp"></div><div class="actions">' +
       (st ? '<button class="btn" id="data-export">Export CSV</button>' : "") +
       (st ? '<button class="btn btn-danger" id="data-clear">Clear data</button>' : "") + "</div></div>";
+    const yhSym = container.settings.get("yahoo_symbol") || "GC=F";
+    const yhRange = container.settings.get("yahoo_range") || "2y";
+    const yhLast = container.settings.get("yahoo_last_at");
+    html += '<div class="card" style="margin-bottom:14px"><h3>Yahoo Finance <span class="sub">live OHLCV import · daily bars</span></h3>' +
+      '<div class="frow">' +
+      '<div class="field" style="flex:2"><label>Symbol</label><input id="yh-sym" list="yh-syms" value="' + U.esc(yhSym) + '" placeholder="GC=F"><datalist id="yh-syms"><option value="GC=F"><option value="XAUUSD=X"><option value="XAU=X"><option value="SI=F"><option value="CL=F"><option value="ES=F"></datalist>' +
+      '<div class="hint">GC=F gold futures · XAUUSD=X spot · any Yahoo symbol works. Daily interval; replaces the current dataset.</div></div>' +
+      '<div class="field"><label>History</label><select id="yh-range">' +
+      [["1y", "1 year"], ["2y", "2 years"], ["5y", "5 years"], ["10y", "10 years"], ["max", "Maximum"]]
+        .map(o => '<option value="' + o[0] + '"' + (yhRange === o[0] ? " selected" : "") + ">" + o[1] + "</option>").join("") + "</select></div>" +
+      '<div class="field" style="flex:0 0 auto"><label>&nbsp;</label><div style="display:flex;gap:6px">' +
+      '<button class="btn btn-primary" id="yh-import">⇩ Import from Yahoo</button>' +
+      '<button class="btn" id="yh-refresh" title="Re-fetch the same symbol/history">↻ Refresh</button></div></div></div>' +
+      '<div id="yh-status" class="err-msg">' + (yhLast ? '<span style="color:var(--ink-3)">Last Yahoo import: ' + U.esc(yhLast) + " (" + U.esc(yhSym) + ", " + U.esc(yhRange) + ")</span>" : "") + "</div>" +
+      '<p class="muted small" style="margin:2px 0 0">Yahoo blocks direct browser calls (CORS), so the app automatically retries via public CORS proxies (allorigins → corsproxy.io). If your network blocks those too, the error will say so.</p></div>';
     html += '<div class="grid grid-2">';
     html += '<div class="card"><h3>Import <span class="sub">CSV or JSON — Date,Open,High,Low,Close,Volume</span></h3>' +
       '<div class="drop" id="data-drop">📂 Drop CSV/JSON file here<br><span class="muted">or click to browse</span><input type="file" id="data-file" accept=".csv,.json,.txt"></div>' +
@@ -107,6 +122,48 @@ startPage("data", {
         if (el) el.disabled = true;
       });
     }
+    /* Yahoo Finance import + refresh */
+    const yhStatus = document.getElementById("yh-status");
+    function yhMessage(txt, ok) {
+      yhStatus.classList.toggle("ok", !!ok);
+      yhStatus.textContent = txt;
+    }
+    async function importYahoo() {
+      const symbol = document.getElementById("yh-sym").value.trim() || "GC=F";
+      const range = document.getElementById("yh-range").value;
+      container.settings.set("yahoo_symbol", symbol);
+      container.settings.set("yahoo_range", range);
+      yhMessage("Fetching " + symbol + " (" + range + ") from Yahoo Finance…");
+      kit.busy(true, "Importing " + symbol + " from Yahoo Finance…");
+      try {
+        const res = await container.yahoo.fetchChart(symbol, range);
+        if (!res.ok) { yhMessage(res.msg, false); kit.busy(false); return; }
+        container.market.setAll(res.bars, { name: symbol + " via Yahoo Finance", source: "Yahoo Finance", symbol });
+        container.settings.set("yahoo_last_at", new Date().toLocaleString("en-GB") + " — " + res.count + " bars");
+        container.log.add("INFO", container.actorId(), "DATA_IMPORT", "Yahoo Finance " + symbol + " (" + range + ") → " + res.count + " bars");
+        kit.busy(false);
+        yhMessage("");
+        kit.toast("Imported " + res.count + " bars for " + symbol + " (" + (res.meta && res.meta.regularMarketPrice != null ? "$" + res.meta.regularMarketPrice : "") + ")", "ok", "Yahoo Finance");
+        location.reload();
+      } catch (e) {
+        kit.busy(false);
+        yhMessage((e && e.message) || "Yahoo import failed.", false);
+      }
+    }
+    if (isAnalyst) {
+      const impBtn = document.getElementById("yh-import");
+      if (impBtn) impBtn.addEventListener("click", importYahoo);
+      const refBtn = document.getElementById("yh-refresh");
+      if (refBtn) refBtn.addEventListener("click", importYahoo);
+      const symInput = document.getElementById("yh-sym");
+      if (symInput) symInput.addEventListener("keydown", e => { if (e.key === "Enter") importYahoo(); });
+    } else {
+      ["yh-import", "yh-refresh"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = true;
+      });
+    }
+
     const ex = document.getElementById("data-export");
     if (ex) ex.addEventListener("click", () => {
       U.download("gold-ohlcv.csv", market.exportCSV(), "text/csv");

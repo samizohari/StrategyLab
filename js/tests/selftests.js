@@ -10,6 +10,7 @@ import { computeMetrics } from "../domain/metrics.js";
 import { U } from "../core/utils.js";
 import { createStrategy } from "../domain/entities.js";
 import { parseLLMJSON } from "../services/ai-provider.js";
+import { parseYahooChart, buildYahooUrl } from "../adapters/yahoo-adapter.js";
 
 function mkBars(closes, opts) {
   opts = opts || {};
@@ -267,6 +268,30 @@ export function runAll(container) {
     const s = container.strategies.all()[0];
     const res = container.advisor.suggestTweaks(s.id);
     if (!res.ok) throw new Error(res.msg);
+  });
+  run("Yahoo parser: bars, null rows, duplicates", () => {
+    const day = 86400;
+    const fixture = {
+      chart: { result: [{
+        timestamp: [1000 + day, 1000 + day, 1000 + 2 * day],
+        indicators: { quote: [{ open: [10, null, 12], high: [11, null, 13], low: [9, null, 11], close: [10.5, null, 12.5], volume: [100, null, 150] }] }
+      }] }
+    };
+    const p = parseYahooChart(fixture);
+    if (!p.ok) throw new Error(p.msg);
+    if (p.bars.length !== 2) throw new Error("bars=" + p.bars.length + " (null/dup rows must be dropped)");
+    if (p.bars[0].d > p.bars[1].d) throw new Error("not sorted");
+    if (p.bars[0].c !== 10.5) throw new Error("close mismatch");
+  });
+  run("Yahoo parser: error envelope", () => {
+    const p = parseYahooChart({ chart: { error: { description: "No data found" } } });
+    if (p.ok) throw new Error("should fail");
+    if (!/No data/.test(p.msg)) throw new Error("msg wrong: " + p.msg);
+  });
+  run("Yahoo url builder", () => {
+    const u = buildYahooUrl("GC=F", "2y", "1d");
+    if (u.indexOf("GC%3DF") < 0 || u.indexOf("range=2y") < 0) throw new Error(u);
+    if (buildYahooUrl("X", "bogus", "1d").indexOf("range=2y") < 0) throw new Error("bad range fallback");
   });
   run("Rate limiting: lock after 5 fails", () => {
     for (let i = 0; i < 5; i++) container.auth.login("viewer", "wrongpass1");
