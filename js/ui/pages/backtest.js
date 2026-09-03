@@ -2,6 +2,7 @@
 "use strict";
 import { startPage } from "../../app/page.js";
 import { U } from "../../core/utils.js";
+import { openBuilder } from "../builder.js";
 
 startPage("backtest", {
   mount(container, view, { kit, charts, shared, user }) {
@@ -39,15 +40,26 @@ startPage("backtest", {
     }
     view.innerHTML = html;
 
-    const state = { mode: "single", singleId: strategies.length ? strategies[0].id : null, members: {} };
+    // restore the last strategy edited/used here so page reloads keep the selection
+    let lastStrategy = null;
+    try { lastStrategy = sessionStorage.getItem("bt_lastStrategy"); } catch (e) { /* ignore */ }
+    const state = {
+      mode: "single",
+      singleId: strategies.length
+        ? (strategies.some(s => s.id === lastStrategy) ? lastStrategy : strategies[0].id)
+        : null,
+      members: {}
+    };
 
     function stratPickHTML() {
       const area = document.getElementById("bt-stratpick");
       if (!area) return;
       if (state.mode === "single") {
-        area.innerHTML = '<div class="field"><label>Strategy</label><select id="bt-sel">' +
+        area.innerHTML = '<div class="field"><label>Strategy</label><div style="display:flex;gap:6px">' +
+          '<select id="bt-sel" style="flex:1">' +
           strategies.map(s => '<option value="' + s.id + '"' + (s.id === state.singleId ? " selected" : "") + ">" + U.esc(s.name) + (s.combine && s.combine.enabled ? " [" + U.esc(s.combine.logic) + "]" : "") + "</option>").join("") +
-          '</select><div class="hint" id="bt-seldoc"></div></div>';
+          '</select><button class="btn btn-sm" id="bt-edit" title="Edit this strategy (opens the builder)">✎ Edit</button></div>' +
+          '<div class="hint" id="bt-seldoc"></div></div>';
         const sel = area.querySelector("#bt-sel");
         const doc = () => {
           const s = svc.byId(sel.value);
@@ -55,8 +67,19 @@ startPage("backtest", {
           document.getElementById("bt-seldoc").textContent = s ? ((meta ? meta.label + " — " : "") + (s.desc || "")) : "";
           document.getElementById("bt-selname").textContent = s ? s.name : "";
         };
-        sel.addEventListener("change", () => { state.singleId = sel.value; doc(); });
+        sel.addEventListener("change", () => {
+          state.singleId = sel.value;
+          doc();
+          try { sessionStorage.setItem("bt_lastStrategy", state.singleId); } catch (e) { /* ignore */ }
+        });
         doc();
+        const editBtn = area.querySelector("#bt-edit");
+        if (editBtn) editBtn.addEventListener("click", () => {
+          const current = sel.value || state.singleId;
+          if (!current) { kit.toast("Pick a strategy first", "warn"); return; }
+          try { sessionStorage.setItem("bt_lastStrategy", current); } catch (e) { /* ignore */ }
+          openBuilder(container, { kit, charts }, current);
+        });
       } else {
         if (!strategies.length) { area.innerHTML = "<p class='muted'>No strategies.</p>"; return; }
         area.innerHTML = '<div class="field"><label>Select members &amp; weights (capital is split by weight)</label><div class="fgrid" id="bt-pf">' +
