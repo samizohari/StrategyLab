@@ -45,7 +45,7 @@ export class OptimizerService {
       return this.backtest.runAsync(clone, bars, from, to, { capital: capital || strategy.capitalManagement.initialCapital })
         .then(res => {
           done++;
-          if (onProgress && done % 5 === 0 || done === total) {
+          if (onProgress && (done % 5 === 0 || done === total)) {
             const el = Date.now() - t0;
             const speed = done / (el / 1000 || 1);
             const eta = speed > 0 ? ((total - done) / speed) * 1000 : 0;

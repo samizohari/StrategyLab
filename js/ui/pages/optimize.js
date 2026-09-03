@@ -61,8 +61,13 @@ startPage("optimize", {
       const msg = document.getElementById("op-msg");
       prog.style.display = "block";
       kit.busy(true, "Optimizing " + s.name + "…");
-      container.optimizer.optimize({ strategy: s, ranges, bars, from: ix.s, to: ix.e, metric })
-        .then(res => {
+      container.optimizer.optimize({
+        strategy: s, ranges, bars, from: ix.s, to: ix.e, metric,
+        onProgress: (p, m) => {
+          bar.style.width = p + "%";
+          msg.textContent = (m || "Optimizing…") + " " + Math.round(p) + "%";
+        }
+      }).then(res => {
           prog.style.display = "none";
           kit.busy(false);
           const out = document.getElementById("op-out");
