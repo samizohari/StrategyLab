@@ -40,8 +40,15 @@ function forcedChangePw(container, user, onDone) {
     "<div id='cpErr' class='err-msg'></div>",
     {
       title: "Change password", size: "sm",
-      foot: '<button class="btn btn-primary" data-save="1">Save password</button>',
-      onClose() { if (!container.auth.current() || container.auth.current().mustChangePw) location.replace("login.html"); }
+      foot: '<button class="btn" data-quit="1">Sign out</button>' +
+        '<button class="btn btn-primary" data-save="1">Save password</button>',
+      onClose() {
+        // closing without saving (✕ / backdrop) = cancel: sign out cleanly
+        if (!container.auth.current() || container.auth.current().mustChangePw) {
+          container.auth.logout("password change cancelled");
+          location.replace("login.html");
+        }
+      }
     }
   );
   const esc = str => String(str).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -54,6 +61,11 @@ function forcedChangePw(container, user, onDone) {
     const meter = m.body.querySelector("#cpwMeter");
     meter.style.width = (pol.ok ? 100 : Math.max(4, pol.score * 25)) + "%";
     meter.style.background = pol.ok ? "var(--ok)" : pol.score <= 1 ? "var(--bad)" : pol.score === 2 ? "var(--warn)" : "var(--acc)";
+  });
+  const quitBtn = m.overlay.querySelector("[data-quit]");
+  if (quitBtn) quitBtn.addEventListener("click", () => {
+    container.auth.logout("quit during forced password change");
+    location.replace("login.html");
   });
   m.overlay.querySelector("[data-save]").addEventListener("click", () => {
     const p1 = m.body.querySelector("#cpw1").value;
