@@ -129,6 +129,10 @@ startPage("data", {
       yhStatus.textContent = txt;
     }
     async function importYahoo() {
+      if (!container.yahoo) {
+        yhMessage("Yahoo import module not loaded yet — do a hard refresh (Ctrl/Cmd+Shift+R) to update the app.", false);
+        return;
+      }
       const symbol = document.getElementById("yh-sym").value.trim() || "GC=F";
       const range = document.getElementById("yh-range").value;
       container.settings.set("yahoo_symbol", symbol);
