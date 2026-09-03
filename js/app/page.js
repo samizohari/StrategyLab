@@ -55,7 +55,7 @@ function forcedChangePw(container, user, onDone) {
     meter.style.width = (pol.ok ? 100 : Math.max(4, pol.score * 25)) + "%";
     meter.style.background = pol.ok ? "var(--ok)" : pol.score <= 1 ? "var(--bad)" : pol.score === 2 ? "var(--warn)" : "var(--acc)";
   });
-  m.body.querySelector("[data-save]").addEventListener("click", () => {
+  m.overlay.querySelector("[data-save]").addEventListener("click", () => {
     const p1 = m.body.querySelector("#cpw1").value;
     const p2 = m.body.querySelector("#cpw2").value;
     const err = m.body.querySelector("#cpErr");
