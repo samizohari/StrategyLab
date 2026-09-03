@@ -130,7 +130,10 @@ startPage("backtest", {
       if (countEl) countEl.textContent = container.results.list().length;
       tb.innerHTML = container.results.list().map((r, i) => {
         const m = r.metrics || {};
-        return '<tr style="cursor:pointer" data-id="' + r.id + '"><td>' + (i + 1) + "</td><td>" + U.esc(r.strategy ? r.strategy.name : "Portfolio") +
+        const helpBtn = r.portfolio || !r.strategyId ? ""
+          : '<button class="btn btn-sm btn-ghost" data-rhelp="' + r.id + '" title="Strategy help (Markdown popup)" style="padding:1px 7px;font-size:12px;margin-right:6px">ℹ</button>';
+        return '<tr style="cursor:pointer" data-id="' + r.id + '"><td>' + (i + 1) + "</td><td>" + helpBtn +
+          U.esc(r.strategy ? r.strategy.name : "Portfolio") +
           (r.portfolio ? ' <span class="badge gold">PF</span>' : "") +
           '</td><td class="right ' + ((m.totalReturn || 0) >= 0 ? "pos" : "neg") + '">' + U.signPct(m.totalReturn) +
           '</td><td class="right">' + (m.winRate == null ? "—" : U.num(m.winRate) + "%") +
@@ -139,7 +142,7 @@ startPage("backtest", {
           '</td><td><button class="btn btn-sm btn-ghost" data-del="' + r.id + '">✕</button></td></tr>';
       }).join("") || "<tr><td colspan='8' class='muted'>Nothing saved yet.</td></tr>";
       tb.querySelectorAll("tr[data-id]").forEach(tr => tr.addEventListener("click", ev => {
-        if (ev.target.closest("[data-del]")) return;
+        if (ev.target.closest("[data-del]") || ev.target.closest("[data-rhelp]")) return;
         showResult(tr.getAttribute("data-id"));
       }));
       tb.querySelectorAll("[data-del]").forEach(bn => bn.addEventListener("click", ev => {
@@ -147,6 +150,23 @@ startPage("backtest", {
         container.results.remove(bn.getAttribute("data-del"));
         kit.toast("Result removed", "ok");
         fillSaved();
+      }));
+      tb.querySelectorAll("[data-rhelp]").forEach(bn => bn.addEventListener("click", ev => {
+        ev.stopPropagation();
+        const r = container.results.get(bn.getAttribute("data-rhelp"));
+        if (!r) return;
+        // prefer the live strategy (current help doc); fall back to the run snapshot
+        const live = r.strategyId ? svc.byId(r.strategyId) : null;
+        const target = live || (() => {
+          const st = r.strategy || {};
+          return {
+            id: st.id || null, name: st.name || "Strategy", desc: "",
+            strategyLogic: st.logic || { type: "MA_CROSS", params: {} },
+            riskManagement: st.rm || {}, capitalManagement: st.cm || {},
+            combine: st.combine || { enabled: false }, helpMd: null
+          };
+        })();
+        showStrategyHelp({ kit, strategy: target, resolveName: id => { const m = svc.byId(id); return m ? m.name : null; } });
       }));
     }
     fillSaved();
