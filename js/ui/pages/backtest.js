@@ -84,9 +84,19 @@ startPage("backtest", {
     }));
     stratPickHTML();
 
+    function ensureSavedSection() {
+      if (document.getElementById("bt-saved")) return;
+      const html = '<div class="card" style="margin-top:14px"><h3>Saved results <span class="sub" id="bt-saved-count">' +
+        container.results.list().length + '</span></h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>Strategy</th><th class="right">Return</th><th class="right">Win rate</th><th class="right">Trades</th><th class="right">MaxDD</th><th class="right">Sharpe</th><th></th></tr></thead><tbody id="bt-saved"></tbody></table></div></div>';
+      const ref = document.getElementById("bt-result");
+      ref.insertAdjacentHTML("beforebegin", html);
+    }
     function fillSaved() {
+      if (container.results.list().length && !document.getElementById("bt-saved")) ensureSavedSection();
       const tb = document.getElementById("bt-saved");
       if (!tb) return;
+      const countEl = document.getElementById("bt-saved-count");
+      if (countEl) countEl.textContent = container.results.list().length;
       tb.innerHTML = container.results.list().map((r, i) => {
         const m = r.metrics || {};
         return '<tr style="cursor:pointer" data-id="' + r.id + '"><td>' + (i + 1) + "</td><td>" + U.esc(r.strategy ? r.strategy.name : "Portfolio") +
@@ -116,7 +126,7 @@ startPage("backtest", {
       const panel = document.getElementById("bt-result");
       panel.innerHTML = "";
       shared.renderResultDetail(panel, r);
-      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (panel.scrollIntoView) panel.scrollIntoView({ behavior: "smooth", block: "start" });
     }
     window.__showResult = showResult;
 

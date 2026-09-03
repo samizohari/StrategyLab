@@ -81,7 +81,9 @@ export class BacktestService {
       progress(100);
       return this._buildResult(strategy, cfg, st, sIdx, eIdx, opts);
     };
-    return step();
+    // Always resolve as a Promise: a single-chunk run completes synchronously
+    // inside step(), and consumers rely on .then().
+    return Promise.resolve(step());
   }
 
   /** runPortfolio(items, bars, sIdx, eIdx, opts) — split capital by weights, aggregate equity */
@@ -133,7 +135,7 @@ export class BacktestService {
       return step2();
     };
 
-    return runOne(0).then(() => {
+    return Promise.resolve(runOne(0)).then(() => {
       const len = curves.length ? curves[0].curve.length : 0;
       const agg = [];
       for (let k = 0; k < len; k++) {
