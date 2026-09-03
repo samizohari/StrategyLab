@@ -134,6 +134,7 @@ export class OpenAiCompatibleProvider {
     if (draft.riskManagement) s.riskManagement = Object.assign(s.riskManagement, draft.riskManagement);
     if (draft.capitalManagement) s.capitalManagement = Object.assign(s.capitalManagement, draft.capitalManagement);
     if (draft.reasoning) s.desc = String(draft.reasoning).slice(0, 300);
+    if (draft.helpMd) s.helpMd = String(draft.helpMd).slice(0, 8000);
     const errs = strategies.validate(s);
     return errs.length ? { ok: false, errors: errs, strategy: s } : { ok: true, strategy: s };
   }

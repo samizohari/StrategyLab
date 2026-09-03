@@ -105,7 +105,7 @@ The previous single-file build relied on a global `GPB` namespace; the modular b
 
 ## Features
 
-- **Data** — CSV/JSON import (flexible headers, dedupe, validation), manual bars, seeded demo generator, CSV export, date slicing.
+- **Data** — CSV/JSON import (flexible headers, dedupe, validation), manual bars, seeded demo generator, CSV export, date slicing, **Yahoo Finance live import** (any symbol, 1y–max daily history) with a Refresh button — direct calls are CORS-blocked, so the app auto-falls back to public CORS proxies (allorigins → corsproxy.io).
 - **Strategies** — 6-step wizard (type → logic → combination → risk → capital → review): MA cross (SMA/EMA), RSI, MACD, Bollinger, S/R breakout; param tooltips throughout.
 - **Combination engine** — AND consensus, OR, WEIGHTED vote (+threshold), SEQUENTIAL trigger/confirm.
 - **Risk rules** — fixed %/ATR stops, fixed %/trailing take-profit, risk-per-trade sizing, %-of-equity / fixed-units / Kelly sizing, position cap, max daily loss halt, consecutive-loss pause, drawdown halt, compounding, fees.

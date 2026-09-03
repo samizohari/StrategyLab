@@ -11,6 +11,8 @@ import { U } from "../core/utils.js";
 import { createStrategy } from "../domain/entities.js";
 import { parseLLMJSON } from "../services/ai-provider.js";
 import { parseYahooChart, buildYahooUrl } from "../adapters/yahoo-adapter.js";
+import { renderMarkdown } from "../ui/md.js";
+import { composeStrategyHelp } from "../domain/help.js";
 
 function mkBars(closes, opts) {
   opts = opts || {};
@@ -292,6 +294,33 @@ export function runAll(container) {
     const u = buildYahooUrl("GC=F", "2y", "1d");
     if (u.indexOf("GC%3DF") < 0 || u.indexOf("range=2y") < 0) throw new Error(u);
     if (buildYahooUrl("X", "bogus", "1d").indexOf("range=2y") < 0) throw new Error("bad range fallback");
+  });
+  run("Markdown: structure & escaping", () => {
+    const h = renderMarkdown("# Title\n\n- a\n- **b**\n\n| K | V |\n|---|---|\n| x | `1` |\n\n<script>alert(1)</scr" + "ipt>");
+    if (h.indexOf("<h1>Title</h1>") < 0) throw new Error("heading missing: " + h.slice(0, 80));
+    if (h.indexOf("<li><strong>b</strong></li>") < 0) throw new Error("bold list missing");
+    if (h.indexOf("<table>") < 0 || h.indexOf("<code>1</code>") < 0) throw new Error("table/code missing");
+    if (h.indexOf("<script>") >= 0) throw new Error("not escaped");
+  });
+  run("Markdown: fenced code block preserved", () => {
+    const h = renderMarkdown("```js\nconst x = 1 < 2;\n```");
+    if (h.indexOf("<pre><code>") < 0 || h.indexOf("&lt;") < 0) throw new Error(h.slice(0, 100));
+  });
+  run("Strategy help composer: default docs", () => {
+    const s = container.strategies.create("Doc Test", "MA_CROSS");
+    s.strategyLogic.params = { fastMA: 10, slowMA: 30, fastType: "sma", slowType: "sma", signalType: "cross" };
+    const md = composeStrategyHelp(s, () => null);
+    if (md.indexOf("# Doc Test") < 0) throw new Error("no title");
+    if (md.indexOf("| Fast MA period | `10` |") < 0) throw new Error("param table missing");
+    if (md.indexOf("## Risk management") < 0 || md.indexOf("## Capital management") < 0) throw new Error("sections missing");
+  });
+  run("Strategy save auto-writes help", () => {
+    const s = container.strategies.create("Auto Help", "MACD");
+    s.strategyLogic.params = { fast: 12, slow: 26, signal: 9, mode: "cross" };
+    const saved = container.strategies.save(s);
+    if (!saved.ok) throw new Error(saved.errors.join(";"));
+    if (!s.helpMd || s.helpMd.indexOf("# Auto Help") < 0) throw new Error("helpMd not generated on save");
+    container.strategies.remove(s.id);
   });
   run("Rate limiting: lock after 5 fails", () => {
     for (let i = 0; i < 5; i++) container.auth.login("viewer", "wrongpass1");

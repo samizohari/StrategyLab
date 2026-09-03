@@ -2,6 +2,7 @@
 "use strict";
 import { createStrategy, validateStrategy, Catalog } from "../domain/entities.js";
 import { createEvaluator } from "../domain/trading.js";
+import { composeStrategyHelp } from "../domain/help.js";
 
 export class StrategyService {
   constructor({ repo, log, ids }) {
@@ -22,6 +23,9 @@ export class StrategyService {
 
   /** Save (insert or update) after validation. Returns {ok, errors?, strategy?} */
   save(s) {
+    if (!s.helpMd || !String(s.helpMd).trim()) {
+      s.helpMd = composeStrategyHelp(s, id => { const m = this.byId(id); return m ? m.name : null; });
+    }
     const errs = this.validate(s);
     if (errs.length) return { ok: false, errors: errs };
     const all = this.repo.all();

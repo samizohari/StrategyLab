@@ -1,6 +1,8 @@
-/* ui/builder.js — 6-step Strategy Builder wizard (shared controller) */
+/* ui/builder.js — 7-step Strategy Builder wizard (shared controller) */
 "use strict";
 import { U } from "../core/utils.js";
+import { renderMarkdown } from "./md.js";
+import { composeStrategyHelp } from "../domain/help.js";
 
 export function openBuilder(container, ui, id) {
   const svc = container.strategies;
@@ -18,7 +20,7 @@ export function openBuilder(container, ui, id) {
   function goto(step) { wiz.step = step; render(); }
 
   function stepsHTML() {
-    const steps = ["Type", "Logic", "Combination", "Risk", "Capital", "Review"];
+    const steps = ["Type", "Logic", "Combination", "Risk", "Capital", "Help", "Review"];
     let h = '<div class="wiz-step">';
     steps.forEach((n, i) => {
       h += '<span class="st ' + (i < wiz.step ? "done" : i === wiz.step ? "on" : "") + '"><span class="n">' + (i < wiz.step ? "✓" : i + 1) + "</span>" + n + "</span>";
@@ -185,7 +187,7 @@ export function openBuilder(container, ui, id) {
       const cm = s.capitalManagement;
       html = stepsHTML() + '<div class="card" style="margin-bottom:12px"><b>Capital management</b><div class="muted small">Sizing, compounding and drawdown limits.</div></div>';
       html += '<div class="fgrid">' + cat.CAP_META.map(m => fieldHTML(m, cm[m.key])).join("") + "</div>";
-      html += nav(true, "Review & save →");
+      html += nav(true, "Help & docs →");
       body.innerHTML = html;
       function vis() {
         const sz = document.getElementById("f-positionSizing").value;
@@ -198,6 +200,34 @@ export function openBuilder(container, ui, id) {
       vis();
       const next = wireNav(body);
       next.addEventListener("click", () => { collect(body, cat.CAP_META, s.capitalManagement); goto(5); });
+    } else if (wiz.step === 5) {
+      /* Help & documentation (Markdown) */
+      const resolver = id => { const m = svc.byId(id); return m ? m.name : null; };
+      if (!s.helpMd || !String(s.helpMd).trim()) {
+        s.helpMd = composeStrategyHelp(s, resolver);
+      }
+      html = stepsHTML();
+      html += '<div class="card" style="margin-bottom:12px"><b>Help &amp; documentation</b>' +
+        '<div class="muted small">Write a comprehensive guide for this strategy in Markdown — headings, lists, tables, links and code blocks are supported. It is shown via the <b>Help popup</b> next to the strategy.</div></div>';
+      html += '<div class="field"><label>Markdown content <span class="muted small">(auto-filled — edit freely)</span></label>' +
+        '<textarea id="w-help" rows="10" style="font-family:var(--mono);font-size:12.5px"></textarea></div>' +
+        '<button class="btn btn-sm" id="w-help-default">↺ Regenerate default</button>' +
+        '<h4 style="margin-top:12px">Live preview</h4>' +
+        '<div class="card" style="max-height:240px;overflow:auto"><div class="md" id="w-help-prev"></div></div>';
+      html += nav(true, "Review & save →");
+      body.innerHTML = html;
+      const ta = body.querySelector("#w-help");
+      ta.value = s.helpMd || "";
+      const preview = body.querySelector("#w-help-prev");
+      const update = () => { s.helpMd = ta.value; preview.innerHTML = renderMarkdown(ta.value || "*No content yet.*"); };
+      ta.addEventListener("input", update);
+      body.querySelector("#w-help-default").addEventListener("click", () => {
+        ta.value = composeStrategyHelp(s, resolver);
+        update();
+      });
+      update();
+      const nextHelp = wireNav(body);
+      nextHelp.addEventListener("click", () => goto(6));
     } else {
       const errs = svc.validate(s);
       const meta = cat.LOGIC_META[s.strategyLogic.type];
@@ -208,6 +238,7 @@ export function openBuilder(container, ui, id) {
         row("Risk", U.esc(JSON.stringify(s.riskManagement))) +
         row("Capital", U.esc(JSON.stringify(s.capitalManagement))) +
         row("Combination", s.combine && s.combine.enabled ? U.esc(s.combine.logic + " · " + (s.combine.memberIds || []).map(id => { const m = svc.byId(id); return m ? m.name : id; }).join(", ")) : "None") +
+        row("Help doc", s.helpMd && String(s.helpMd).trim() ? "<span class='muted'>" + String(s.helpMd).length + " chars of Markdown — shown via the Help popup</span>" : "auto-generated on save") +
         "</tbody></table></div><div id='wiz-errs'></div>";
       html += nav(true, "", '<button class="btn btn-primary" data-save="1">💾 Save strategy</button>');
       body.innerHTML = html;

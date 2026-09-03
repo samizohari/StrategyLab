@@ -3,6 +3,7 @@
 import { startPage } from "../../app/page.js";
 import { U } from "../../core/utils.js";
 import { openBuilder } from "../builder.js";
+import { showStrategyHelp } from "../md.js";
 
 startPage("backtest", {
   mount(container, view, { kit, charts, shared, user }) {
@@ -58,7 +59,8 @@ startPage("backtest", {
         area.innerHTML = '<div class="field"><label>Strategy</label><div style="display:flex;gap:6px">' +
           '<select id="bt-sel" style="flex:1">' +
           strategies.map(s => '<option value="' + s.id + '"' + (s.id === state.singleId ? " selected" : "") + ">" + U.esc(s.name) + (s.combine && s.combine.enabled ? " [" + U.esc(s.combine.logic) + "]" : "") + "</option>").join("") +
-          '</select><button class="btn btn-sm" id="bt-edit" title="Edit this strategy (opens the builder)">✎ Edit</button></div>' +
+          '</select><button class="btn btn-sm btn-ghost" id="bt-help" title="Strategy help (Markdown popup)">ℹ</button>' +
+          '<button class="btn btn-sm" id="bt-edit" title="Edit this strategy (opens the builder)">✎ Edit</button></div>' +
           '<div class="hint" id="bt-seldoc"></div></div>';
         const sel = area.querySelector("#bt-sel");
         const doc = () => {
@@ -73,6 +75,12 @@ startPage("backtest", {
           try { sessionStorage.setItem("bt_lastStrategy", state.singleId); } catch (e) { /* ignore */ }
         });
         doc();
+        const helpBtn = area.querySelector("#bt-help");
+        if (helpBtn) helpBtn.addEventListener("click", () => {
+          const current = sel.value || state.singleId;
+          const s = current ? svc.byId(current) : null;
+          if (s) showStrategyHelp({ kit, strategy: s, resolveName: id => { const m = svc.byId(id); return m ? m.name : null; } });
+        });
         const editBtn = area.querySelector("#bt-edit");
         if (editBtn) editBtn.addEventListener("click", () => {
           const current = sel.value || state.singleId;

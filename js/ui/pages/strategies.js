@@ -3,6 +3,7 @@
 import { startPage } from "../../app/page.js";
 import { U } from "../../core/utils.js";
 import { openBuilder } from "../builder.js";
+import { showStrategyHelp } from "../md.js";
 
 startPage("strategies", {
   mount(container, view, { kit, charts, shared, user }) {
@@ -49,6 +50,7 @@ startPage("strategies", {
           (errs.length ? '<div class="err-msg" style="margin-top:6px">⚠ ' + errs.map(U.esc).join("; ") + "</div>" : "") + "</div>" +
           '<div style="min-width:230px;max-width:330px" class="muted small">🛡 ' + U.esc(riskTxt) + "<br>💰 " + U.esc(capTxt) + "</div>" +
           '<div style="display:flex;flex-direction:column;gap:6px">' +
+          '<button class="btn btn-sm btn-ghost" data-help="' + s.id + '" title="Strategy help (Markdown)">ℹ Help</button>' +
           '<button class="btn btn-sm" data-edit="' + s.id + '">✎ Edit</button>' +
           '<button class="btn btn-sm btn-ghost" data-dup="' + s.id + '">⧉ Duplicate</button>' +
           '<button class="btn btn-sm btn-ghost" data-exp="' + s.id + '">⇩ JSON</button>' +
@@ -57,6 +59,10 @@ startPage("strategies", {
       document.getElementById("st-list").innerHTML = lh;
       const first = document.getElementById("st-first");
       if (first) first.addEventListener("click", () => openBuilder(container, { kit, charts }, null));
+      document.querySelectorAll("[data-help]").forEach(b => b.addEventListener("click", () => {
+        const s = svc.byId(b.getAttribute("data-help"));
+        if (s) showStrategyHelp({ kit, strategy: s, resolveName: id => { const m = svc.byId(id); return m ? m.name : null; } });
+      }));
       document.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => openBuilder(container, { kit, charts }, b.getAttribute("data-edit"))));
       document.querySelectorAll("[data-dup]").forEach(b => b.addEventListener("click", () => {
         svc.duplicate(b.getAttribute("data-dup"));
