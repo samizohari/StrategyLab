@@ -5,7 +5,7 @@
 import { LocalStorageStore, SessionStore, MemoryStore } from "../core/storage.js";
 import { Clock, IdProvider, SimulatedIpProvider } from "../core/infra.js";
 import {
-  UsersRepo, StrategiesRepo, ResultsRepo, MarketDataRepo, LogsRepo,
+  UsersRepo, StrategiesRepo, ResultsRepo, MarketDataRepo, DatasetsRepo, LogsRepo,
   AlertsRepo, SchedulesRepo, SettingsRepo
 } from "../adapters/repositories.js";
 import { LogService } from "../services/log-service.js";
@@ -38,6 +38,7 @@ export function buildContainer(opts) {
     strategies: new StrategiesRepo(mainStore),
     results: new ResultsRepo(mainStore),
     market: new MarketDataRepo(mainStore),
+    datasets: new DatasetsRepo(mainStore),
     logs: new LogsRepo(mainStore),
     alerts: new AlertsRepo(mainStore),
     schedules: new SchedulesRepo(mainStore),
@@ -50,9 +51,9 @@ export function buildContainer(opts) {
   log.setMaxEntries(settings.get("logMaxEntries"));
 
   const auth = new AuthService({ users: repos.users, log, settings, clock, ids, session: sessionStore });
-  const market = new MarketService({ repo: repos.market, log, ids });
+  const market = new MarketService({ datasets: repos.datasets, legacy: repos.market, settings, log, ids });
   const strategies = new StrategyService({ repo: repos.strategies, log, ids });
-  const backtest = new BacktestService({ strategies, ids, clock });
+  const backtest = new BacktestService({ strategies, ids, clock, settings });
   const results = new ResultService({ repo: repos.results, settings, log });
   const analysis = new AnalysisService({ market, backtest });
   const optimizer = new OptimizerService({ strategies, backtest, market });
@@ -64,7 +65,7 @@ export function buildContainer(opts) {
 
   const container = {
     stores: { main: mainStore, session: sessionStore },
-    repos, settings, log, ids, clock, ip,
+    repos, settings, log, ids, clock, ip, market,
     auth, market, strategies, backtest, results, analysis, optimizer, alerts, schedules,
     advisor, ai, yahoo,
 

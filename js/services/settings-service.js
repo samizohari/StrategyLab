@@ -2,7 +2,7 @@
 "use strict";
 
 const DEFAULTS = {
-  theme: "dark", idleTimeoutMin: 30, logMaxEntries: 1500, defaultInitialCapital: 10000,
+  theme: "dark", symbol: "GC=F", idleTimeoutMin: 30, logMaxEntries: 1500, defaultInitialCapital: 10000,
   defaultRiskPerTrade: 1.5, defaultMaxDailyLoss: 5, resultCap: 20, benchmarkBars: 12000
 };
 

@@ -12,7 +12,7 @@ startPage("data", {
       '<div class="sp"></div><div class="actions">' +
       (st ? '<button class="btn" id="data-export">Export CSV</button>' : "") +
       (st ? '<button class="btn btn-danger" id="data-clear">Clear data</button>' : "") + "</div></div>";
-    const yhSym = container.settings.get("yahoo_symbol") || "GC=F";
+    const yhSym = container.settings.get("symbol") || "GC=F";
     const yhRange = container.settings.get("yahoo_range") || "2y";
     const yhLast = container.settings.get("yahoo_last_at");
     html += '<div class="card" style="margin-bottom:14px"><h3>Yahoo Finance <span class="sub">live OHLCV import · daily bars</span></h3>' +
@@ -47,7 +47,7 @@ startPage("data", {
     html += '<div class="card" style="margin-top:14px"><h3>Series preview <span class="sub" id="data-cnt"></span></h3>' +
       '<div class="tbl-wrap" style="max-height:420px"><table class="tbl"><thead><tr><th>Date</th><th class="right">Open</th><th class="right">High</th><th class="right">Low</th><th class="right">Close</th><th class="right">Volume</th></tr></thead><tbody id="data-tb"></tbody></table></div></div>';
     view.innerHTML = html;
-    document.getElementById("data-cnt").textContent = st ? (st.count + " bars · " + st.start + " → " + st.end) : "no data";
+    document.getElementById("data-cnt").textContent = st ? (market.meta().symbol + " · " + st.count + " bars · " + st.start + " → " + st.end) : "no data for " + market.meta().symbol;
 
     function fillTable() {
       const rows = market.bars().slice(-80).map(b =>
@@ -135,16 +135,16 @@ startPage("data", {
       }
       const symbol = document.getElementById("yh-sym").value.trim() || "GC=F";
       const range = document.getElementById("yh-range").value;
-      container.settings.set("yahoo_symbol", symbol);
       container.settings.set("yahoo_range", range);
       yhMessage("Fetching " + symbol + " (" + range + ") from Yahoo Finance…");
       kit.busy(true, "Importing " + symbol + " from Yahoo Finance…");
       try {
         const res = await container.yahoo.fetchChart(symbol, range);
         if (!res.ok) { yhMessage(res.msg, false); kit.busy(false); return; }
-        container.market.setAll(res.bars, { name: symbol + " via Yahoo Finance", source: "Yahoo Finance", symbol });
+        const storedSym = container.market.importSymbol(symbol, res.bars, { name: symbol + " via Yahoo Finance", source: "Yahoo Finance", symbol });
+        container.settings.set("symbol", storedSym); // whole site now follows this symbol
         container.settings.set("yahoo_last_at", new Date().toLocaleString("en-GB") + " — " + res.count + " bars");
-        container.log.add("INFO", container.actorId(), "DATA_IMPORT", "Yahoo Finance " + symbol + " (" + range + ") → " + res.count + " bars");
+        container.log.add("INFO", container.actorId(), "DATA_IMPORT", "Yahoo Finance " + storedSym + " (" + range + ") → " + res.count + " bars");
         kit.busy(false);
         yhMessage("");
         kit.toast("Imported " + res.count + " bars for " + symbol + " (" + (res.meta && res.meta.regularMarketPrice != null ? "$" + res.meta.regularMarketPrice : "") + ")", "ok", "Yahoo Finance");

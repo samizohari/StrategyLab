@@ -37,7 +37,7 @@ startPage("backtest", {
     html += '<div id="bt-result"></div>';
     if (saved.length) {
       html += '<div class="card" style="margin-top:14px"><h3>Saved results <span class="sub">' + saved.length + '</span></h3>' +
-        '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>Strategy</th><th class="right">Return</th><th class="right">Win rate</th><th class="right">Trades</th><th class="right">MaxDD</th><th class="right">Sharpe</th><th></th><th></th></tr></thead><tbody id="bt-saved"></tbody></table></div></div>';
+        '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>Sym</th><th>Strategy</th><th class="right">Return</th><th class="right">Win rate</th><th class="right">Trades</th><th class="right">MaxDD</th><th class="right">Sharpe</th><th></th><th></th></tr></thead><tbody id="bt-saved"></tbody></table></div></div>';
     }
     view.innerHTML = html;
 
@@ -118,21 +118,45 @@ startPage("backtest", {
     function ensureSavedSection() {
       if (document.getElementById("bt-saved")) return;
       const html = '<div class="card" style="margin-top:14px"><h3>Saved results <span class="sub" id="bt-saved-count">' +
-        container.results.list().length + '</span></h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>Strategy</th><th class="right">Return</th><th class="right">Win rate</th><th class="right">Trades</th><th class="right">MaxDD</th><th class="right">Sharpe</th><th></th><th></th></tr></thead><tbody id="bt-saved"></tbody></table></div></div>';
+        container.results.list().length + '</span></h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>Sym</th><th>Strategy</th><th class="right">Return</th><th class="right">Win rate</th><th class="right">Trades</th><th class="right">MaxDD</th><th class="right">Sharpe</th><th></th><th></th></tr></thead><tbody id="bt-saved"></tbody></table></div></div>';
       const ref = document.getElementById("bt-result");
       ref.insertAdjacentHTML("beforebegin", html);
+    }
+    let symFilter = container.settings.get("symbol") || "All";
+    function ensureSymFilter() {
+      if (document.getElementById("bt-symfilter")) return;
+      const tbRef = document.getElementById("bt-saved");
+      if (!tbRef) return;
+      const card = tbRef.closest(".card");
+      if (!card) return;
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap";
+      const symbols = ["All"];
+      container.results.list().forEach(r => { if (r.symbol && symbols.indexOf(r.symbol) < 0) symbols.push(r.symbol); });
+      wrap.innerHTML = '<label style="margin:0">Symbol:</label><select id="bt-symfilter" style="width:auto">' +
+        symbols.map(s => '<option value="' + U.esc(s) + '"' + (s === symFilter ? " selected" : "") + ">" + U.esc(s) + "</option>").join("") +
+        '</select><span class="muted small">Backtest history per symbol — All shows everything</span>';
+      card.insertBefore(wrap, card.querySelector(".tbl-wrap"));
+      document.getElementById("bt-symfilter").addEventListener("change", e => {
+        symFilter = e.target.value;
+        fillSaved();
+      });
     }
     function fillSaved() {
       if (container.results.list().length && !document.getElementById("bt-saved")) ensureSavedSection();
       const tb = document.getElementById("bt-saved");
       if (!tb) return;
+      ensureSymFilter();
+      let list = container.results.list();
+      if (symFilter && symFilter !== "All") list = list.filter(r => r.symbol === symFilter);
       const countEl = document.getElementById("bt-saved-count");
-      if (countEl) countEl.textContent = container.results.list().length;
-      tb.innerHTML = container.results.list().map((r, i) => {
+      if (countEl) countEl.textContent = list.length;
+      tb.innerHTML = list.map((r, i) => {
         const m = r.metrics || {};
         const helpBtn = r.portfolio || !r.strategyId ? ""
           : '<button class="btn btn-sm btn-ghost" data-rhelp="' + r.id + '" title="Strategy help (Markdown popup)" style="padding:1px 7px;font-size:12px">ℹ</button>';
-        return '<tr style="cursor:pointer" data-id="' + r.id + '"><td>' + (i + 1) + "</td><td>" +
+        const symCell = r.symbol ? '<td><span class="badge neutral" title="Market symbol">' + U.esc(r.symbol) + "</span></td>" : "<td>—</td>";
+        return '<tr style="cursor:pointer" data-id="' + r.id + '"><td>' + (i + 1) + "</td>" + symCell + "<td>" +
           U.esc(r.strategy ? r.strategy.name : "Portfolio") +
           (r.portfolio ? ' <span class="badge gold">PF</span>' : "") +
           '</td><td class="right ' + ((m.totalReturn || 0) >= 0 ? "pos" : "neg") + '">' + U.signPct(m.totalReturn) +
@@ -140,7 +164,7 @@ startPage("backtest", {
           '</td><td class="right">' + (m.totalTrades || 0) +
           '</td><td class="right neg">' + U.num(m.maxDrawdown) + '%</td><td class="right">' + (m.sharpe == null ? "—" : U.num(m.sharpe)) +
           "</td><td>" + helpBtn + '</td><td><button class="btn btn-sm btn-ghost" data-del="' + r.id + '">✕</button></td></tr>';
-      }).join("") || "<tr><td colspan='9' class='muted'>Nothing saved yet.</td></tr>";
+      }).join("") || "<tr><td colspan='10' class='muted'>Nothing saved yet.</td></tr>";
       tb.querySelectorAll("tr[data-id]").forEach(tr => tr.addEventListener("click", ev => {
         if (ev.target.closest("[data-del]") || ev.target.closest("[data-rhelp]")) return;
         showResult(tr.getAttribute("data-id"));

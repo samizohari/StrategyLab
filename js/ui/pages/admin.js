@@ -120,6 +120,9 @@ startPage("admin", {
         '<div class="frow"><div class="field"><label>Saved results cap</label><input type="number" id="st-cap" min="5" max="100" value="' + s.resultCap + '"></div>' +
         '<div class="field"><label>Default capital ($)</label><input type="number" id="st-capital" min="100" value="' + s.defaultInitialCapital + '"></div></div>' +
         '<div class="field"><label>Default theme</label><select id="st-theme"><option value="dark"' + (s.theme === "dark" ? " selected" : "") + '>Dark</option><option value="light"' + (s.theme === "light" ? " selected" : "") + '>Light</option></select></div>' +
+        '<div class="field"><label>Active market symbol</label><input id="st-symbol" list="st-syms" value="' + U.esc(s.symbol || "GC=F") + '">' +
+        '<datalist id="st-syms"><option value="GC=F"><option value="XAUUSD=X"><option value="XAU=X"><option value="SI=F"><option value="CL=F"><option value="ES=F"></datalist>' +
+        '<div class="hint">The whole site (dashboard, market data, backtests, advisor) runs on this symbol’s dataset. Each imported dataset is stored separately per symbol. Changing the symbol reloads the site.</div></div>' +
         '<button class="btn btn-primary" id="st-save">Save settings</button><div class="err-msg" id="st-msg"></div></div>';
       document.getElementById("st-save").addEventListener("click", () => {
         const gv = id => parseFloat(document.getElementById(id).value);
@@ -129,10 +132,13 @@ startPage("admin", {
         container.settings.set("resultCap", Math.max(5, gv("st-cap")));
         container.settings.set("defaultInitialCapital", Math.max(100, gv("st-capital")));
         container.settings.set("theme", document.getElementById("st-theme").value);
-        container.log.add("INFO", container.actorId(), "SETTINGS_UPDATE", "System settings updated");
+        const sym = (document.getElementById("st-symbol").value || "GC=F").trim().toUpperCase();
+        container.settings.set("symbol", sym);
+        container.log.add("INFO", container.actorId(), "SETTINGS_UPDATE", "Settings updated; active symbol " + sym);
         const el = document.getElementById("st-msg");
         el.classList.add("ok");
-        el.textContent = "✓ Saved";
+        el.textContent = "✓ Saved — reloading the site for the new symbol…";
+        setTimeout(() => location.reload(), 700);
       });
     }
 

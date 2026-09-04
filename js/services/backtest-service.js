@@ -9,11 +9,15 @@ const CHUNK = 2500;
 const frame = () => new Promise(r => setTimeout(r, 0));
 
 export class BacktestService {
-  constructor({ strategies, ids, clock }) {
+  constructor({ strategies, ids, clock, settings }) {
     this.strategies = strategies;   // StrategyService (source of evaluator)
     this.ids = ids;
     this.clock = clock;
+    this.settings = settings || null;
     this.engine = new SimulationEngine();
+  }
+  _symbol() {
+    return (this.settings && this.settings.get("symbol")) || "GC=F";
   }
 
   _buildResult(strategy, cfg, st, sIdx, eIdx, opts) {
@@ -21,6 +25,7 @@ export class BacktestService {
     const metrics = computeMetrics(curve, st.trades, cfg.cm.initialCapital);
     return {
       id: opts.resultId || this.ids.next(),
+      symbol: this._symbol(),
       strategyId: strategy.id,
       strategy: this._snapshot(strategy),
       dateRange: {
@@ -151,6 +156,7 @@ export class BacktestService {
       return {
         id: opts.resultId || this.ids.next(),
         portfolio: true,
+        symbol: this._symbol(),
         children: sts.map(r => ({ id: r.id, strategyId: r.strategyId, name: r.strategy.name, metrics: r.metrics, trades: r.tradeLog.length })),
         strategy: { id: "portfolio", name: "Portfolio" },
         dateRange: { start: bars[sIdx] ? bars[sIdx].d : null, end: bars[eIdx] ? bars[eIdx].d : null, bars: len },

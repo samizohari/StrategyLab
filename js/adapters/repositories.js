@@ -47,6 +47,13 @@ export class MarketDataRepo extends BaseRepo {
   clear() { this._save({ bars: [], meta: { name: "", source: "", symbol: "XAU/USD", importedAt: null } }); }
 }
 
+/** Per-symbol datasets — "one file per symbol import" (keyed by SYMBOL). */
+export class DatasetsRepo extends BaseRepo {
+  constructor(store) { super(store, "gpb_datasets"); }
+  get() { return this._all({}); }
+  save(map) { this._save(map); }
+}
+
 export class LogsRepo extends BaseRepo {
   constructor(store) { super(store, "gpb_logs"); this.arcKey = "gpb_logs_archive"; }
   all() { return this._all([]); }

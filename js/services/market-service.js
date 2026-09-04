@@ -1,42 +1,83 @@
-/* services/market-service.js — market data use case over MarketDataRepo + pure domain parsers */
+/* services/market-service.js — multi-symbol market data use case.
+   Every imported dataset is stored separately per symbol ("file"), and all
+   consumers operate on the dataset of the ACTIVE symbol (settings.symbol).
+   Switching the symbol updates the whole site after reload. */
 "use strict";
 import { parseCSV, parseJSON, exportCSV, demoData } from "../domain/series.js";
 import { regimes, regimeSegments } from "../domain/regime.js";
 
+const norm = s => {
+  const v = String(s == null ? "" : s).trim().toUpperCase();
+  return v || "GC=F";
+};
+
 export class MarketService {
-  constructor({ repo, log, ids }) {
-    this.repo = repo;
-    this.log = log;
-    this.ids = ids;
+  /** @param {{datasets: DatasetsRepo, legacy: MarketDataRepo, settings, log, ids}} deps */
+  constructor(deps) {
+    this.dsRepo = deps.datasets;   // gpb_datasets: { SYMBOL: {bars, meta} } — one file per symbol
+    this.legacy = deps.legacy;     // gpb_data mirror (kept for the single-file build)
+    this.settings = deps.settings;
+    this.log = deps.log;
+    this.ids = deps.ids;
     this._cache = null;
     this._load();
   }
   _load() {
-    const d = this.repo.get();
-    this._cache = { bars: d.bars.slice(), meta: Object.assign({}, d.meta) };
+    const map = this.dsRepo.get() || {};
+    if (!Object.keys(map).length) {
+      // migrate a legacy single-dataset install into a symbol file
+      const lg = this.legacy.get();
+      if (lg && lg.bars && lg.bars.length) {
+        const sym = norm(lg.meta && lg.meta.symbol) || this.symbol();
+        map[sym] = { bars: lg.bars, meta: Object.assign({}, lg.meta, { symbol: sym }) };
+      }
+    }
+    this._cache = map;
   }
-  bars() { return this._cache.bars; }
-  meta() { return this._cache.meta; }
-  count() { return this._cache.bars.length; }
+  /** Active symbol setting (normalised). */
+  symbol() { return norm(this.settings.get("symbol")); }
+  /** All stored symbol files. */
+  datasetList() {
+    return Object.keys(this._cache).map(k => ({
+      symbol: k,
+      bars: this._cache[k].bars ? this._cache[k].bars.length : 0,
+      meta: this._cache[k].meta || {}
+    }));
+  }
+  _dataset(sym) {
+    if (!this._cache[sym]) this._cache[sym] = { bars: [], meta: { name: "", source: "", symbol: sym, importedAt: null } };
+    return this._cache[sym];
+  }
+  /** Active dataset helpers (the rest of the site sees only the active symbol). */
+  bars() { return this._dataset(this.symbol()).bars; }
+  meta() { return this._dataset(this.symbol()).meta; }
+  count() { return this.bars().length; }
 
-  setAll(bars, metaInfo) {
-    this._cache.bars = bars;
-    this._cache.meta = Object.assign({}, this._cache.meta, metaInfo || {}, { importedAt: new Date().toISOString() });
+  /** Replace the ACTIVE symbol's dataset ("file"). */
+  setAll(bars, metaInfo) { this._put(this.symbol(), bars, metaInfo); return this._dataset(this.symbol()); }
+  /** Save a dataset under an explicit symbol (Yahoo import) — separate file. */
+  importSymbol(sym, bars, metaInfo) { this._put(norm(sym), bars, metaInfo); return norm(sym); }
+  _put(sym, bars, metaInfo) {
+    const cur = this._dataset(sym);
+    const nm = Object.assign({}, cur.meta, metaInfo || {}, {
+      symbol: metaInfo && metaInfo.symbol ? norm(metaInfo.symbol) : sym,
+      importedAt: new Date().toISOString()
+    });
+    this._cache[sym] = { bars, meta: nm };
     this._persist();
-    return this._cache;
   }
   _persist() {
-    this.repo.set({
-      bars: this._cache.bars,
-      meta: Object.assign({}, this._cache.meta, { importedAt: this._cache.meta.importedAt || new Date().toISOString() })
-    });
+    this.dsRepo.save(this._cache);
+    const a = this._cache[this.symbol()];
+    if (a) this.legacy.set({ bars: a.bars, meta: a.meta }); // mirror for the legacy build
   }
   clear() {
-    this._cache = { bars: [], meta: { name: "", source: "", symbol: "XAU/USD", importedAt: null } };
-    this.repo.clear();
+    const s = this.symbol();
+    this._cache[s] = { bars: [], meta: { name: "", source: "", symbol: s, importedAt: null } };
+    this._persist();
   }
 
-  /* import */
+  /* ---- import (active symbol) ---- */
   importCSV(text, metaInfo) { return this._apply(parseCSV(text), metaInfo); }
   importJSON(text, metaInfo) { return this._apply(parseJSON(text), metaInfo); }
   _apply(res, metaInfo) {
@@ -47,26 +88,27 @@ export class MarketService {
   addBar(b) {
     const arr = this.bars();
     if (arr.some(x => x.d === b.d)) return { ok: false, msg: "A bar for " + b.d + " already exists." };
-    const fresh = [...arr, {
-      d: b.d, o: +b.o, h: +b.h, l: +b.l, c: +b.c, v: +(b.v || 0)
-    }].sort((a, x) => (a.d < x.d ? -1 : a.d > x.d ? 1 : 0));
+    const fresh = [...arr, { d: b.d, o: +b.o, h: +b.h, l: +b.l, c: +b.c, v: +(b.v || 0) }]
+      .sort((a, x) => (a.d < x.d ? -1 : a.d > x.d ? 1 : 0));
     this.setAll(fresh, {});
     return { ok: true };
   }
   ensureDemo() {
-    if (this.count() === 0) {
+    if (!Object.keys(this._cache).length) {
+      const s = this.symbol();
       const b = demoData(1600, 20260903);
-      this.setAll(b, { name: "Synthetic gold daily", source: "Seeded demo generator", symbol: "XAU/USD" });
+      this._put(s, b, { name: "Synthetic gold daily (demo)", source: "Seeded demo — replace with Yahoo import", symbol: s });
     }
   }
   regenerateDemo() {
+    const s = this.symbol();
     const b = demoData(1600);
-    this.setAll(b, { name: "Synthetic gold daily", source: "Demo generator (seeded)", symbol: "XAU/USD" });
+    this._put(s, b, { name: "Synthetic demo", source: "Demo (seeded)", symbol: s });
     return b.length;
   }
   exportCSV() { return exportCSV(this.bars()); }
 
-  /* ranges & regimes */
+  /* ---- ranges & regimes (active symbol) ---- */
   rangeBounds() {
     const b = this.bars();
     if (!b.length) return null;

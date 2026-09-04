@@ -66,6 +66,7 @@ startPage("dashboard", {
             ? '<td></td>'
             : '<td><button class="btn btn-sm btn-ghost" data-rhelp="' + r.id + '" title="Strategy help (Markdown popup)" style="padding:1px 7px;font-size:12px">ℹ</button></td>';
           return '<tr style="cursor:pointer" data-id="' + r.id + '"><td>' + U.esc(r.strategy ? r.strategy.name : "Portfolio") + (r.portfolio ? ' <span class="badge gold">PF</span>' : "") +
+            (r.symbol ? '<div class="muted small" style="font-size:10px">' + U.esc(r.symbol) + "</div>" : "") +
             '</td><td class="right ' + ((m.totalReturn || 0) >= 0 ? "pos" : "neg") + '">' + U.signPct(m.totalReturn) +
             '</td><td class="right">' + (m.totalTrades || 0) + '</td><td class="muted">' + U.fmtDate(r.timestamp) + "</td>" + helpBtn +
             '</td><td style="text-align:right">' + delBtn + "</td></tr>";

@@ -34,8 +34,13 @@ const eq = (a, b, eps) => Math.abs(a - b) <= (eps || 1e-6);
 export function runAll(container) {
   const results = [];
   const run = (name, fn) => {
-    try { const d = fn(); results.push({ name, ok: true, detail: d || "" }); }
-    catch (e) { results.push({ name, ok: false, detail: e.message }); }
+    try {
+      const d = fn();
+      if (d && typeof d.then === "function") {
+        d.then(() => results.push({ name, ok: true, detail: "" }))
+          .catch(e => results.push({ name, ok: false, detail: e.message }));
+      } else results.push({ name, ok: true, detail: d || "" });
+    } catch (e) { results.push({ name, ok: false, detail: e.message }); }
   };
 
   /* crypto */
@@ -373,6 +378,29 @@ export function runAll(container) {
     const recs = container.advisor.localRecommendations();
     const hasTL = recs.some(r => r.draft.strategyLogic.type === "TRENDLINE");
     if (!hasTL) throw new Error("trendline rec missing");
+  });
+  run("Market: datasets stored per symbol (separate files)", () => {
+    const m = container.market;
+    const active = m.symbol();
+    const beforeCount = m.count();
+    const fake = [{ d: "2026-09-01", o: 1, h: 2, l: 0.5, c: 1.5, v: 10 }];
+    const saved = m.importSymbol("XAUUSD=X", fake, { name: "spot test" });
+    if (saved !== "XAUUSD=X") throw new Error("importSymbol wrong");
+    if (m.symbol() !== active) throw new Error("import changed active symbol");
+    if (m.count() !== beforeCount) throw new Error("active dataset touched");
+    container.settings.set("symbol", "XAUUSD=X");
+    if (m.count() !== 1 || m.bars()[0].c !== 1.5) throw new Error("switched dataset not read");
+    container.settings.set("symbol", active);
+    if (m.count() !== beforeCount) throw new Error("active dataset lost after switch back");
+    const files = m.datasetList();
+    if (files.length < 2 || !files.some(f => f.symbol === "XAUUSD=X")) throw new Error("symbol files missing");
+  });
+  run("Backtest result records active symbol", () => {
+    const sym = container.settings.get("symbol");
+    const s = container.strategies.byId(container.strategies.all()[0].id);
+    const bars = container.market.bars();
+    return container.backtest.runAsync(s, bars, 0, Math.min(bars.length - 1, 600), { capital: 10000 })
+      .then(r => { if (r.symbol !== sym) throw new Error("result symbol " + r.symbol + " != " + sym); });
   });
   run("Rate limiting: lock after 5 fails", () => {
     for (let i = 0; i < 5; i++) container.auth.login("viewer", "wrongpass1");
