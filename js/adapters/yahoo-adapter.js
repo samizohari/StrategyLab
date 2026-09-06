@@ -53,6 +53,21 @@ export function parseYahooChart(data) {
   return { ok: true, bars, meta: res.meta || {}, count: bars.length };
 }
 
+
+/** Pure parser for the Yahoo symbol-search endpoint. Exported for tests. */
+export function parseYahooQuotes(data) {
+  if (!data || !data.quotes) return { ok: false, msg: "No quotes in response." };
+  const seen = {};
+  const out = [];
+  for (const q of data.quotes) {
+    const sym = q && q.symbol ? String(q.symbol).trim() : "";
+    if (!sym || seen[sym] || !/^[A-Z0-9.\^=_-]+$/.test(sym)) continue;
+    seen[sym] = 1;
+    out.push({ symbol: sym, name: q.shortname || q.longname || "", exchange: q.exchange || "", type: q.quoteType || "" });
+  }
+  if (!out.length) return { ok: false, msg: "No matching symbols found." };
+  return { ok: true, quotes: out };
+}
 export class YahooFinanceAdapter {
   /** @param {{settings, log, fetchFn?, timeoutMs?}} deps */
   constructor(deps) {
@@ -95,5 +110,27 @@ export class YahooFinanceAdapter {
       msg: "Could not reach Yahoo Finance (CORS blocks browsers from calling it directly). Tried " + urls.length +
         " route(s): " + attempts.join(" | ") + ". Tip: run a local CORS proxy or set the `yahoo_proxy` setting."
     };
+  }
+
+  /** fetchSymbols(query) -> {ok, quotes:[{symbol,name,exchange,type}]} — symbol list from Yahoo. */
+  async fetchSymbols(query) {
+    const q = String(query || "gold").trim();
+    const direct = "https://query1.finance.yahoo.com/v1/finance/search?q=" + encodeURIComponent(q) +
+      "&quotesCount=30&newsCount=0&listsCount=0";
+    const urls = [direct];
+    const forced = this.settings.get("yahoo_proxy");
+    if (forced) urls.unshift(String(forced).replace("{url}", encodeURIComponent(direct)));
+    else PROXIES.forEach(p => urls.push(p.replace("{url}", encodeURIComponent(direct))));
+    let lastErr = null;
+    for (const url of urls) {
+      try {
+        const r = await this._withTimeout(url, { method: "GET", headers: { Accept: "application/json" } });
+        if (!r.ok) { lastErr = new Error("HTTP " + r.status); continue; }
+        const parsed = parseYahooQuotes(await r.json());
+        if (parsed.ok) return parsed;
+        lastErr = new Error(parsed.msg);
+      } catch (e) { lastErr = e; }
+    }
+    return { ok: false, msg: "Symbol search failed (" + (lastErr && lastErr.message || "network") + ")." };
   }
 }

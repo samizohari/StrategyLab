@@ -18,7 +18,7 @@ startPage("data", {
     html += '<div class="card" style="margin-bottom:14px"><h3>Yahoo Finance <span class="sub">live OHLCV import · daily bars</span></h3>' +
       '<div class="frow">' +
       '<div class="field" style="flex:2"><label>Symbol</label><input id="yh-sym" list="yh-syms" value="' + U.esc(yhSym) + '" placeholder="GC=F"><datalist id="yh-syms"><option value="GC=F"><option value="XAUUSD=X"><option value="XAU=X"><option value="SI=F"><option value="CL=F"><option value="ES=F"></datalist>' +
-      '<div class="hint">GC=F gold futures · XAUUSD=X spot · any Yahoo symbol works. Daily interval; replaces the current dataset.</div></div>' +
+      '<div class="hint">GC=F gold futures · XAUUSD=X spot · any Yahoo symbol works. Daily interval; replaces the current dataset. Switch the active symbol on the <a href="settings.html">Settings page</a>.</div></div>' +
       '<div class="field"><label>History</label><select id="yh-range">' +
       [["1y", "1 year"], ["2y", "2 years"], ["5y", "5 years"], ["10y", "10 years"], ["max", "Maximum"]]
         .map(o => '<option value="' + o[0] + '"' + (yhRange === o[0] ? " selected" : "") + ">" + o[1] + "</option>").join("") + "</select></div>" +

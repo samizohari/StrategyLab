@@ -16,6 +16,7 @@ const NAV = [
   { id: "alerts", label: "Alerts", ic: "🔔", group: "Automation", kbd: "9", roles: ["ADMIN", "ANALYST"] },
   { id: "reports", label: "Reports & Export", ic: "▤", group: "Automation", kbd: "0", roles: ["ADMIN", "ANALYST", "VIEWER"] },
   { id: "scheduler", label: "Scheduled Runs", ic: "⏱", group: "Automation", kbd: "", roles: ["ADMIN", "ANALYST"] },
+  { id: "settings", label: "Settings", ic: "⚙", group: "Admin", kbd: "", roles: ["ADMIN", "ANALYST"] },
   { id: "logs", label: "System Logs", ic: "🕮", group: "Admin", kbd: "L", roles: ["ADMIN"] },
   { id: "admin", label: "Admin Panel", ic: "⚷", group: "Admin", kbd: "A", roles: ["ADMIN"] }
 ];

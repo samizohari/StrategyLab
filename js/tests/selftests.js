@@ -10,7 +10,7 @@ import { computeMetrics } from "../domain/metrics.js";
 import { U } from "../core/utils.js";
 import { createStrategy } from "../domain/entities.js";
 import { parseLLMJSON } from "../services/ai-provider.js";
-import { parseYahooChart, buildYahooUrl } from "../adapters/yahoo-adapter.js";
+import { parseYahooChart, buildYahooUrl, parseYahooQuotes } from "../adapters/yahoo-adapter.js";
 import { renderMarkdown } from "../ui/md.js";
 import { composeStrategyHelp } from "../domain/help.js";
 
@@ -401,6 +401,18 @@ export function runAll(container) {
     const bars = container.market.bars();
     return container.backtest.runAsync(s, bars, 0, Math.min(bars.length - 1, 600), { capital: 10000 })
       .then(r => { if (r.symbol !== sym) throw new Error("result symbol " + r.symbol + " != " + sym); });
+  });
+  run("Yahoo symbol list parser", () => {
+    const fixture = { quotes: [
+      { symbol: "GC=F", shortname: "Gold", exchange: "CMX" },
+      { symbol: "GC=F", shortname: "dup" },
+      { symbol: "BAD SYM" },
+      { symbol: "XAUUSD=X", shortname: "Gold Spot" }
+    ] };
+    const p = parseYahooQuotes(fixture);
+    if (!p.ok) throw new Error(p.msg);
+    if (p.quotes.length !== 2) throw new Error("quotes=" + p.quotes.length);
+    if (p.quotes[0].symbol !== "GC=F" || p.quotes[1].symbol !== "XAUUSD=X") throw new Error("order/symbol wrong");
   });
   run("Rate limiting: lock after 5 fails", () => {
     for (let i = 0; i < 5; i++) container.auth.login("viewer", "wrongpass1");

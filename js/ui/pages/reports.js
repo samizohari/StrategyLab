@@ -13,9 +13,14 @@ startPage("reports", {
       view.innerHTML = html;
       return;
     }
+    const syms = ["All"];
+    saved.forEach(r => { if (r.symbol && syms.indexOf(r.symbol) < 0) syms.push(r.symbol); });
+    const activeSym = container.settings.get("symbol") || "GC=F";
     html += '<div class="card no-print"><div class="frow">' +
-      '<div class="field"><label>Result</label><select id="rp-sel">' + saved.map((r, i) =>
-        '<option value="' + r.id + '"' + (i === 0 ? " selected" : "") + ">" + U.esc(r.strategy ? r.strategy.name : "Portfolio") + " · " + U.fmtDate(r.timestamp) + "</option>").join("") + "</select></div>" +
+      '<div class="field"><label>Symbol</label><select id="rp-sym">' +
+      syms.map(s => '<option value="' + U.esc(s) + '"' + (s === activeSym || (s === "All" && syms.indexOf(activeSym) < 0) ? " selected" : "") + ">" + U.esc(s) + "</option>").join("") +
+      '</select><div class="hint">Reports follow the active symbol (All shows everything).</div></div>' +
+      '<div class="field"><label>Result</label><select id="rp-sel"></select></div>' +
       '<div class="field" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn btn-primary" id="rp-build">Build report</button></div></div></div>';
     html += '<div id="rp-out"></div>';
     view.innerHTML = html;
@@ -68,7 +73,23 @@ startPage("reports", {
       document.getElementById("rp-eqcsv").addEventListener("click", () => shared.exportEquityCSV(r));
       document.getElementById("rp-json").addEventListener("click", () => shared.exportReportJSON(r));
     }
-    build(document.getElementById("rp-sel").value);
+    let pool = saved;
+    function refreshSel() {
+      const sel = document.getElementById("rp-sel");
+      const keep = sel && sel.value;
+      sel.innerHTML = pool.map((r, i) =>
+        '<option value="' + r.id + '"' + (r.id === keep || (!keep && i === 0) ? " selected" : "") + ">" +
+        (r.symbol ? "[" + U.esc(r.symbol) + "] " : "") + U.esc(r.strategy ? r.strategy.name : "Portfolio") + " · " + U.fmtDate(r.timestamp) + "</option>").join("") ||
+        "<option value=''>No results for this symbol — run backtests first</option>";
+      build(sel.value || "");
+    }
+    const symSel = document.getElementById("rp-sym");
+    if (symSel) symSel.addEventListener("change", () => {
+      const v = symSel.value;
+      pool = v === "All" ? saved : saved.filter(r => r.symbol === v);
+      refreshSel();
+    });
+    refreshSel();
     container.log.add("INFO", container.actorId(), "REPORT_VIEW", "Opened report builder");
   }
 });

@@ -132,9 +132,7 @@ startPage("admin", {
         container.settings.set("resultCap", Math.max(5, gv("st-cap")));
         container.settings.set("defaultInitialCapital", Math.max(100, gv("st-capital")));
         container.settings.set("theme", document.getElementById("st-theme").value);
-        const sym = (document.getElementById("st-symbol").value || "GC=F").trim().toUpperCase();
-        container.settings.set("symbol", sym);
-        container.log.add("INFO", container.actorId(), "SETTINGS_UPDATE", "Settings updated; active symbol " + sym);
+        container.log.add("INFO", container.actorId(), "SETTINGS_UPDATE", "Settings updated");
         const el = document.getElementById("st-msg");
         el.classList.add("ok");
         el.textContent = "✓ Saved — reloading the site for the new symbol…";

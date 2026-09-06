@@ -71,6 +71,14 @@ export class MarketService {
     const a = this._cache[this.symbol()];
     if (a) this.legacy.set({ bars: a.bars, meta: a.meta }); // mirror for the legacy build
   }
+  /** Delete one symbol's dataset file (results for it are kept). */
+  removeSymbol(sym) {
+    const s = norm(sym);
+    if (this._cache[s]) delete this._cache[s];
+    if (this.symbol() === s) this._cache[s] = { bars: [], meta: { name: "", source: "", symbol: s, importedAt: null } };
+    this._persist();
+    return true;
+  }
   clear() {
     const s = this.symbol();
     this._cache[s] = { bars: [], meta: { name: "", source: "", symbol: s, importedAt: null } };
