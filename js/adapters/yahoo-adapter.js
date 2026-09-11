@@ -1,14 +1,21 @@
-/* adapters/yahoo-adapter.js — Yahoo Finance chart import (infrastructure adapter).
-   Direct browser calls to query1.finance.yahoo.com are blocked by CORS, so the
-   adapter tries the endpoint directly, then falls back to public CORS proxies
-   (allorigins, then corsproxy.io). A custom proxy can be forced via the setting
-   `yahoo_proxy` (full URL with {url} placeholder). */
+/* adapters/yahoo-adapter.js — Yahoo Finance import + symbol search (infrastructure adapter).
+   Browser CORS blocks direct calls, and free CORS proxies are flaky, so the adapter
+   walks a retry matrix (allorigins raw, allorigins get-wrapper, corsproxy.io) and,
+   for symbol search, falls back to a curated list of Yahoo symbols so the Settings
+   selector always has items. Force your own proxy via the `yahoo_proxy` setting
+   (full URL with {url} placeholder). */
 "use strict";
 
-const PROXIES = [
-  "https://api.allorigins.win/raw?url={url}",
-  "https://corsproxy.io/?url={url}"
-];
+const ENCODERS = {
+  direct: u => u,
+  aoRaw: u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+  aoGet: u => "https://api.allorigins.win/get?url=" + encodeURIComponent(u),
+  aoRaw2: u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+  aoGet2: u => "https://api.allorigins.win/get?url=" + encodeURIComponent(u),
+  corsproxy: u => "https://corsproxy.io/?url=" + encodeURIComponent(u)
+};
+const ORDER = ["direct", "aoRaw", "aoGet", "aoRaw2", "aoGet2", "corsproxy"];
+const WRAPPED = { aoGet: true, aoGet2: true };
 
 export function buildYahooUrl(symbol, range, interval) {
   const sym = encodeURIComponent(String(symbol || "GC=F").trim());
@@ -35,16 +42,14 @@ export function parseYahooChart(data) {
   for (let i = 0; i < ts.length; i++) {
     const o = q.open && q.open[i], h = q.high && q.high[i], l = q.low && q.low[i],
       c = q.close && q.close[i], v = q.volume && q.volume[i];
-    if (o == null || h == null || l == null || c == null) continue; // trading halt / gap rows
+    if (o == null || h == null || l == null || c == null) continue;
     const d = new Date(ts[i] * 1000).toISOString().slice(0, 10);
     if (seen[d]) continue;
     seen[d] = 1;
     bars.push({
       d,
-      o: Math.round(o * 100) / 100,
-      h: Math.round(h * 100) / 100,
-      l: Math.round(l * 100) / 100,
-      c: Math.round(c * 100) / 100,
+      o: Math.round(o * 100) / 100, h: Math.round(h * 100) / 100,
+      l: Math.round(l * 100) / 100, c: Math.round(c * 100) / 100,
       v: v == null ? 0 : Math.round(v)
     });
   }
@@ -53,84 +58,122 @@ export function parseYahooChart(data) {
   return { ok: true, bars, meta: res.meta || {}, count: bars.length };
 }
 
-
-/** Pure parser for the Yahoo symbol-search endpoint. Exported for tests. */
+/** Pure parser for the Yahoo symbol-search endpoint. */
 export function parseYahooQuotes(data) {
   if (!data || !data.quotes) return { ok: false, msg: "No quotes in response." };
   const seen = {};
   const out = [];
   for (const q of data.quotes) {
     const sym = q && q.symbol ? String(q.symbol).trim() : "";
-    if (!sym || seen[sym] || !/^[A-Z0-9.\^=_-]+$/.test(sym)) continue;
+    if (!sym || seen[sym] || !/^[A-Z0-9.\\^=_-]+$/.test(sym)) continue;
     seen[sym] = 1;
     out.push({ symbol: sym, name: q.shortname || q.longname || "", exchange: q.exchange || "", type: q.quoteType || "" });
   }
   if (!out.length) return { ok: false, msg: "No matching symbols found." };
   return { ok: true, quotes: out };
 }
+
+/** Curated Yahoo symbols used when the search API is unreachable (dropdown stays filled). */
+export const FALLBACK_SYMBOLS = [
+  { symbol: "GC=F", name: "Gold", exchange: "CMX" },
+  { symbol: "XAUUSD=X", name: "Gold Spot / USD", exchange: "CCY" },
+  { symbol: "XAU=X", name: "Gold (London)", exchange: "CCY" },
+  { symbol: "SI=F", name: "Silver", exchange: "CMX" },
+  { symbol: "XAGUSD=X", name: "Silver Spot / USD", exchange: "CCY" },
+  { symbol: "PL=F", name: "Platinum", exchange: "NYM" },
+  { symbol: "PA=F", name: "Palladium", exchange: "NYM" },
+  { symbol: "CL=F", name: "Crude Oil WTI", exchange: "NYM" },
+  { symbol: "NG=F", name: "Natural Gas", exchange: "NYM" },
+  { symbol: "ES=F", name: "S&P 500 Futures", exchange: "CME" },
+  { symbol: "NQ=F", name: "Nasdaq 100 Futures", exchange: "CME" },
+  { symbol: "YM=F", name: "Dow Jones Futures", exchange: "CBOT" },
+  { symbol: "DX=F", name: "US Dollar Index", exchange: "NYB" },
+  { symbol: "EURUSD=X", name: "EUR/USD", exchange: "CCY" },
+  { symbol: "GBPUSD=X", name: "GBP/USD", exchange: "CCY" },
+  { symbol: "USDJPY=X", name: "USD/JPY", exchange: "CCY" },
+  { symbol: "BTC-USD", name: "Bitcoin USD", exchange: "CCC" },
+  { symbol: "ETH-USD", name: "Ethereum USD", exchange: "CCC" },
+  { symbol: "^GSPC", name: "S&P 500", exchange: "PCX" },
+  { symbol: "^IXIC", name: "Nasdaq Composite", exchange: "PCX" },
+  { symbol: "^DJI", name: "Dow Jones", exchange: "DJI" },
+  { symbol: "GLD", name: "SPDR Gold Shares", exchange: "PCX" },
+  { symbol: "SLV", name: "iShares Silver Trust", exchange: "PCX" },
+  { symbol: "MGC=F", name: "Micro Gold Futures", exchange: "CMX" }
+];
+
 export class YahooFinanceAdapter {
   /** @param {{settings, log, fetchFn?, timeoutMs?}} deps */
   constructor(deps) {
     this.settings = deps.settings;
     this.log = deps.log || null;
     this.fetchFn = deps.fetchFn || ((...a) => fetch(...a));
-    this.timeoutMs = deps.timeoutMs || 30000;
+    this.timeoutMs = deps.timeoutMs || 25000;
   }
-  _withTimeout(url, opts) {
+  _attemptUrls(url) {
+    const forced = this.settings.get("yahoo_proxy");
+    const list = [];
+    if (forced) list.push({ url: String(forced).replace("{url}", encodeURIComponent(url)), wrap: false });
+    else {
+      ORDER.forEach(k => {
+        list.push({ url: ENCODERS[k](url), wrap: !!WRAPPED[k] });
+        if (k === "direct") list[list.length - 1].note = "direct (CORS blocked in browsers)";
+      });
+    }
+    return list;
+  }
+  async _fetchJSON(entry) {
     const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
     const timer = ctrl ? setTimeout(() => ctrl.abort(), this.timeoutMs) : null;
-    return this.fetchFn(url, Object.assign({}, opts, ctrl ? { signal: ctrl.signal } : {}))
-      .finally(() => { if (timer) clearTimeout(timer); });
+    try {
+      const r = await this.fetchFn(entry.url, Object.assign(
+        { method: "GET", headers: { Accept: "application/json" } },
+        ctrl ? { signal: ctrl.signal } : {}
+      ));
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      let data = await r.json();
+      if (entry.wrap) {
+        // allorigins "get" returns { contents: "<json string>" }
+        if (data && typeof data.contents === "string") data = JSON.parse(data.contents);
+      }
+      return { data };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
-  async _fetchVia(url) {
-    const r = await this._withTimeout(url, { method: "GET", headers: { Accept: "application/json" } });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    return r.json();
-  }
-  /** Try direct, then each CORS proxy in order. Throws the last error. */
-  async fetchChart(symbol, range) {
-    const direct = buildYahooUrl(symbol, range, "1d");
-    const attempts = [];
-    const urls = [direct];
-    const forced = this.settings.get("yahoo_proxy");
-    if (forced) urls.unshift(String(forced).replace("{url}", encodeURIComponent(direct)));
-    else PROXIES.forEach(p => urls.push(p.replace("{url}", encodeURIComponent(direct))));
-
+  async _request(url, parser) {
+    const attempts = this._attemptUrls(url);
+    const tried = [];
     let lastErr = null;
-    for (const url of urls) {
+    for (const entry of attempts) {
       try {
-        return parseYahooChart(await this._fetchVia(url));
+        const { data } = await this._fetchJSON(entry);
+        const parsed = parser(data);
+        if (parsed.ok) return parsed;
+        lastErr = new Error(parsed.msg || "parse error");
       } catch (e) {
         lastErr = e;
-        attempts.push(e.message || String(e));
+        tried.push((entry.note || "proxy") + ":" + (e.message || e));
       }
     }
-    return {
-      ok: false,
-      msg: "Could not reach Yahoo Finance (CORS blocks browsers from calling it directly). Tried " + urls.length +
-        " route(s): " + attempts.join(" | ") + ". Tip: run a local CORS proxy or set the `yahoo_proxy` setting."
-    };
+    return { ok: false, msg: tried.join(" | "), lastError: lastErr && lastErr.message };
   }
 
-  /** fetchSymbols(query) -> {ok, quotes:[{symbol,name,exchange,type}]} — symbol list from Yahoo. */
+  /** fetchChart(symbol, range) — OHLCV import. */
+  fetchChart(symbol, range) {
+    return this._request(buildYahooUrl(symbol, range, "1d"), parseYahooChart);
+  }
+
+  /** fetchSymbols(query) — symbol list from Yahoo; falls back to the curated list. */
   async fetchSymbols(query) {
     const q = String(query || "gold").trim();
-    const direct = "https://query1.finance.yahoo.com/v1/finance/search?q=" + encodeURIComponent(q) +
+    const url = "https://query1.finance.yahoo.com/v1/finance/search?q=" + encodeURIComponent(q) +
       "&quotesCount=30&newsCount=0&listsCount=0";
-    const urls = [direct];
-    const forced = this.settings.get("yahoo_proxy");
-    if (forced) urls.unshift(String(forced).replace("{url}", encodeURIComponent(direct)));
-    else PROXIES.forEach(p => urls.push(p.replace("{url}", encodeURIComponent(direct))));
-    let lastErr = null;
-    for (const url of urls) {
-      try {
-        const r = await this._withTimeout(url, { method: "GET", headers: { Accept: "application/json" } });
-        if (!r.ok) { lastErr = new Error("HTTP " + r.status); continue; }
-        const parsed = parseYahooQuotes(await r.json());
-        if (parsed.ok) return parsed;
-        lastErr = new Error(parsed.msg);
-      } catch (e) { lastErr = e; }
-    }
-    return { ok: false, msg: "Symbol search failed (" + (lastErr && lastErr.message || "network") + ")." };
+    const res = await this._request(url, parseYahooQuotes);
+    if (res.ok) return res;
+    return {
+      ok: true, fallback: true,
+      quotes: FALLBACK_SYMBOLS.slice(),
+      msg: "Yahoo search unreachable (" + (res.lastError || "network") + ") — showing the built-in Yahoo symbol list instead."
+    };
   }
 }

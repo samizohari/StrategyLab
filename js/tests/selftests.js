@@ -10,7 +10,7 @@ import { computeMetrics } from "../domain/metrics.js";
 import { U } from "../core/utils.js";
 import { createStrategy } from "../domain/entities.js";
 import { parseLLMJSON } from "../services/ai-provider.js";
-import { parseYahooChart, buildYahooUrl, parseYahooQuotes } from "../adapters/yahoo-adapter.js";
+import { parseYahooChart, buildYahooUrl, parseYahooQuotes, YahooFinanceAdapter, FALLBACK_SYMBOLS } from "../adapters/yahoo-adapter.js";
 import { renderMarkdown } from "../ui/md.js";
 import { composeStrategyHelp } from "../domain/help.js";
 
@@ -413,6 +413,45 @@ export function runAll(container) {
     if (!p.ok) throw new Error(p.msg);
     if (p.quotes.length !== 2) throw new Error("quotes=" + p.quotes.length);
     if (p.quotes[0].symbol !== "GC=F" || p.quotes[1].symbol !== "XAUUSD=X") throw new Error("order/symbol wrong");
+  });
+  run("Yahoo fallback list is usable", () => {
+    if (FALLBACK_SYMBOLS.length < 20) throw new Error("too few: " + FALLBACK_SYMBOLS.length);
+    const seen = {};
+    FALLBACK_SYMBOLS.forEach(q => {
+      if (!/^[A-Z0-9.\^=_-]+$/.test(q.symbol)) throw new Error("bad symbol: " + q.symbol);
+      if (seen[q.symbol]) throw new Error("dup: " + q.symbol);
+      seen[q.symbol] = 1;
+    });
+    if (!seen["GC=F"]) throw new Error("GC=F missing");
+  });
+  run("Yahoo search: proxy retry + fallback on total failure", () => {
+    const fixture = { quotes: [{ symbol: "GC=F", shortname: "Gold", exchange: "CMX" }] };
+    let n = 0;
+    const okAdapter = new YahooFinanceAdapter({
+      settings: { get: () => null }, timeoutMs: 50,
+      fetchFn: async (url) => {
+        n++;
+        if (n < 3) throw new Error("HTTP 401");           // first routes fail
+        if (String(url).indexOf("/get?url=") >= 0)         // wrapper route succeeds
+          return { ok: true, json: async () => ({ contents: JSON.stringify(fixture) }) };
+        return { ok: true, json: async () => fixture };
+      }
+    });
+    return okAdapter.fetchSymbols("gold").then(res => {
+      if (!res.ok || res.fallback) throw new Error("expected live result, got " + JSON.stringify(res).slice(0, 80));
+      if (res.quotes[0].symbol !== "GC=F") throw new Error("wrong quotes");
+    });
+  });
+  run("Yahoo search: built-in list when every route fails", () => {
+    const bad = new YahooFinanceAdapter({
+      settings: { get: () => null }, timeoutMs: 50,
+      fetchFn: async () => { throw new Error("HTTP 401"); }
+    });
+    return bad.fetchSymbols("gold").then(res => {
+      if (!res.ok || !res.fallback) throw new Error("expected fallback");
+      if (res.quotes.length < 20) throw new Error("fallback too small");
+      if (!/built-in/.test(res.msg)) throw new Error("missing notice: " + res.msg);
+    });
   });
   run("Rate limiting: lock after 5 fails", () => {
     for (let i = 0; i < 5; i++) container.auth.login("viewer", "wrongpass1");

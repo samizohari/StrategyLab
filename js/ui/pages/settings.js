@@ -131,9 +131,15 @@ startPage("settings", {
           document.getElementById("set-res").style.display = "none";
           return;
         }
-        status.textContent = "✓ " + res.quotes.length + " symbol(s) from Yahoo Finance.";
+        if (res.fallback) {
+          status.textContent = "⚠ " + (res.msg || "Yahoo search unreachable — showing the built-in symbol list.") +
+            " (" + res.quotes.length + " symbols)";
+        } else {
+          status.textContent = "✓ " + res.quotes.length + " symbol(s) from Yahoo Finance.";
+        }
         renderQuotes(res.quotes);
-        container.log.add("INFO", container.actorId(), "SYMBOL_SEARCH", "Yahoo symbol search: " + q);
+        container.log.add("INFO", container.actorId(), "SYMBOL_SEARCH",
+          "Yahoo symbol search: " + q + (res.fallback ? " (built-in fallback list)" : ""));
       }).catch(e => { status.textContent = (e && e.message) || "Search failed."; });
     }
     document.getElementById("set-search").addEventListener("click", () => doSearch(document.getElementById("set-q").value));
