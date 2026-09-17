@@ -97,6 +97,14 @@ export function startPage(name, handlers) {
   if (!user) { location.replace("login.html"); return; }
   const roles = PAGE_ROLES[name];
   if (roles && roles.indexOf(user.role) < 0) { location.replace("dashboard.html"); return; }
+  // background housekeeping: refresh the Yahoo symbol list once per tab session
+  // when the cached list is older than 24h (silent, never blocks the page)
+  try {
+    if (!sessionStorage.getItem("symRefreshChecked")) {
+      sessionStorage.setItem("symRefreshChecked", "1");
+      if (user.role !== "VIEWER") container.symbolRefresh.maybeRefresh(24).catch(() => {});
+    }
+  } catch (e) { /* ignore */ }
 
   container.bindNotify({ askPermission: kit.askNotifyPermission, notify: kit.notify });
   const shared = createShared({ container, kit, charts });

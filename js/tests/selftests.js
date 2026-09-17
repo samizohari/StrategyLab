@@ -11,6 +11,7 @@ import { U } from "../core/utils.js";
 import { createStrategy } from "../domain/entities.js";
 import { parseLLMJSON } from "../services/ai-provider.js";
 import { parseYahooChart, buildYahooUrl, parseYahooQuotes, YahooFinanceAdapter, FALLBACK_SYMBOLS } from "../adapters/yahoo-adapter.js";
+import { SymbolRefreshService } from "../services/symbol-refresh.js";
 import { renderMarkdown } from "../ui/md.js";
 import { composeStrategyHelp } from "../domain/help.js";
 
@@ -465,6 +466,23 @@ export function runAll(container) {
     const r2 = await a2.fetchSymbols("gold");
     if (r2.source !== "cache") throw new Error("expected cache, got " + r2.source);
     if (!r2.quotes.length || r2.quotes[0].symbol !== "GC=F") throw new Error("cached quotes wrong");
+  });
+  run("Symbol refresh: stale triggers once, fresh skips", async () => {
+    let calls = 0;
+    const map = { yahoo_symbols_cache: { at: Date.now() - 25 * 3600000, quotes: ["old"] } };
+    const settings = { get: k => (k in map ? map[k] : null), set: (k, v) => { map[k] = v; } };
+    const yahoo = {
+      fetchSymbols: async () => {
+        calls++;
+        map.yahoo_symbols_cache = { at: Date.now(), quotes: ["GC=F"] };
+        return { ok: true, source: "live", quotes: ["GC=F"] };
+      }
+    };
+    const svc = new SymbolRefreshService({ yahoo, settings, log: { add: () => {} } });
+    const r1 = await svc.maybeRefresh(24);
+    if (!r1.ok || calls !== 1) throw new Error("stale cache should refresh once (calls=" + calls + ")");
+    const r2 = await svc.maybeRefresh(24);
+    if (!r2.skipped || calls !== 1) throw new Error("fresh cache must skip (calls=" + calls + ")");
   });
   run("Rate limiting: lock after 5 fails", () => {
     for (let i = 0; i < 5; i++) container.auth.login("viewer", "wrongpass1");

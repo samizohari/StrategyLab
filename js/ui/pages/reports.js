@@ -6,7 +6,12 @@ import { U } from "../../core/utils.js";
 startPage("reports", {
   mount(container, view, { kit, charts, shared, user }) {
     const saved = container.results.list();
-    let html = '<div class="view-head"><div><h1>Reports &amp; Export</h1><p>Generate a printable report or download results as CSV / JSON.</p></div>' +
+    const _b = container.market.rangeBounds();
+    const _meta = container.market.meta();
+    let html = '<div class="muted small" style="margin:0 0 10px">Data source: <b>' + U.esc(_meta.symbol || "—") + '</b> · ' +
+      (_b ? U.esc(_b.start) + " – " + U.esc(_b.end) : "no data") + ' · ' + container.market.count() + ' bars' +
+      (_meta.source ? ' · ' + U.esc(_meta.source) : "") + '</div>';
+    html += '<div class="view-head"><div><h1>Reports &amp; Export</h1><p>Generate a printable report or download results as CSV / JSON.</p></div>' +
       '<div class="sp"></div><div class="actions"><button class="btn" id="rp-print" disabled>🖨 Print / PDF</button></div></div>';
     if (!saved.length) {
       html += '<div class="card"><div class="empty"><div class="big">▤</div>No saved results to report on.</div></div>';

@@ -6,7 +6,11 @@ import { U } from "../../core/utils.js";
 startPage("compare", {
   mount(container, view, { kit, charts, shared, user }) {
     const saved = container.results.list();
-    let html = '<div class="view-head"><div><h1>Comparison</h1><p>Side-by-side metrics, ranking, equity overlay and regime heatmaps across saved results.</p></div>' +
+    const _b = container.market.rangeBounds();
+    const _meta = container.market.meta();
+    let html = '<div class="muted small" style="margin:0 0 10px">Data source: <b>' + U.esc(_meta.symbol || "—") + '</b> · ' +
+      (_b ? U.esc(_b.start) + " – " + U.esc(_b.end) : "no data") + ' · ' + container.market.count() + ' bars' + '</div>';
+    html += '<div class="view-head"><div><h1>Comparison</h1><p>Side-by-side metrics, ranking, equity overlay and regime heatmaps across saved results.</p></div>' +
       '<div class="sp"></div><div class="actions"><button class="btn btn-primary" id="cmp-refresh">⟳ Refresh</button></div></div>';
     if (!saved.length) {
       html += '<div class="card"><div class="empty"><div class="big">≋</div>No saved results to compare.<br><a class="btn btn-primary" style="margin-top:10px" href="backtest.html">Run backtests first</a></div></div>';
