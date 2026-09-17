@@ -52,7 +52,7 @@ startPage("settings", {
       '<div class="frow">' +
       '<div class="field" style="flex:2"><label>Search symbol or name</label><input id="set-q" list="set-dl" placeholder="GC=F, gold, XAUUSD…" value="' + U.esc(active) + '">' +
       '<datalist id="set-dl"></datalist><div class="hint">Search is filled automatically from Yahoo for the current symbol. After switching, import/refresh the dataset on Market Data — it is stored as its own file.</div></div>' +
-      '<div class="field" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn btn-primary" id="set-search">Search Yahoo</button></div></div>' +
+      '<div class="field" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn btn-primary" id="set-search">Search Yahoo</button> <button class="btn" id="set-retry" title="Retry the live Yahoo search (bypasses the fallback list)">↻ Retry</button></div></div>' +
       '<div id="set-res" class="tbl-wrap" style="display:none;max-height:260px"><table class="tbl"><thead><tr><th>Symbol</th><th>Name</th><th>Exchange</th><th></th></tr></thead><tbody></tbody></table></div>' +
       '<div id="set-status" class="err-msg" style="margin-top:6px"></div></div>';
 
@@ -144,6 +144,10 @@ startPage("settings", {
     }
     document.getElementById("set-search").addEventListener("click", () => doSearch(document.getElementById("set-q").value));
     document.getElementById("set-q").addEventListener("keydown", e => { if (e.key === "Enter") doSearch(e.target.value); });
+    document.getElementById("set-retry").addEventListener("click", () => {
+      status.textContent = "Retrying live Yahoo search…";
+      doSearch(document.getElementById("set-q").value || active);
+    });
 
     // auto-fill from Yahoo on mount with the current symbol
     doSearch(active);
