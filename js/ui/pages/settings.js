@@ -54,7 +54,8 @@ startPage("settings", {
       '<datalist id="set-dl"></datalist><div class="hint">Search is filled automatically from Yahoo for the current symbol. After switching, import/refresh the dataset on Market Data — it is stored as its own file.</div></div>' +
       '<div class="field" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn btn-primary" id="set-search">Search Yahoo</button> <button class="btn" id="set-retry" title="Retry the live Yahoo search (bypasses the fallback list)">↻ Retry</button></div></div>' +
       '<div id="set-res" class="tbl-wrap" style="display:none;max-height:260px"><table class="tbl"><thead><tr><th>Symbol</th><th>Name</th><th>Exchange</th><th></th></tr></thead><tbody></tbody></table></div>' +
-      '<div id="set-status" class="err-msg" style="margin-top:6px"></div></div>';
+      '<div id="set-status" class="err-msg" style="margin-top:6px"></div>' +
+      '<div style="margin-top:6px"><span id="set-src" class="badge" style="display:none"></span></div></div>';
 
     /* 4 · appearance + admin note */
     html += '<div class="card" style="margin-top:14px"><h3>Appearance &amp; admin</h3>' +
@@ -131,15 +132,24 @@ startPage("settings", {
           document.getElementById("set-res").style.display = "none";
           return;
         }
-        if (res.fallback) {
+        const src = res.source || (res.fallback ? "builtin" : "live");
+        const chip = document.getElementById("set-src");
+        if (chip) {
+          chip.style.display = "inline-flex";
+          chip.className = "badge " + (src === "live" ? "ok" : src === "cache" ? "warn" : "bad");
+          chip.textContent = src === "live" ? "source: live Yahoo" : src === "cache" ? "source: cached list" : "source: built-in list";
+        }
+        if (src === "builtin") {
           status.textContent = "⚠ " + (res.msg || "Yahoo search unreachable — showing the built-in symbol list.") +
             " (" + res.quotes.length + " symbols)";
+        } else if (src === "cache") {
+          status.textContent = "⚠ " + (res.msg || "Using cached symbol list.") + " (" + res.quotes.length + " symbols)";
         } else {
           status.textContent = "✓ " + res.quotes.length + " symbol(s) from Yahoo Finance.";
         }
         renderQuotes(res.quotes);
         container.log.add("INFO", container.actorId(), "SYMBOL_SEARCH",
-          "Yahoo symbol search: " + q + (res.fallback ? " (built-in fallback list)" : ""));
+          "Yahoo symbol search: " + q + " [source: " + src + "]");
       }).catch(e => { status.textContent = (e && e.message) || "Search failed."; });
     }
     document.getElementById("set-search").addEventListener("click", () => doSearch(document.getElementById("set-q").value));

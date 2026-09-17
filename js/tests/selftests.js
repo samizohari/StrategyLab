@@ -453,6 +453,19 @@ export function runAll(container) {
       if (!/built-in/.test(res.msg)) throw new Error("missing notice: " + res.msg);
     });
   });
+  run("Yahoo adapter: caches last live symbol list", async () => {
+    const storeMap = {};
+    const settingsStub = { get: k => (k in storeMap ? storeMap[k] : null), set: (k, v) => { storeMap[k] = v; } };
+    const liveFetch = async () => ({ ok: true, status: 200, json: async () => ({ quotes: [{ symbol: "GC=F", shortname: "Gold", exchange: "CMX" }] }) });
+    const a1 = new YahooFinanceAdapter({ settings: settingsStub, fetchFn: liveFetch, timeoutMs: 5000 });
+    const r1 = await a1.fetchSymbols("gold");
+    if (r1.source !== "live") throw new Error("expected live, got " + r1.source);
+    if (!storeMap.yahoo_symbols_cache) throw new Error("live list was not cached");
+    const a2 = new YahooFinanceAdapter({ settings: settingsStub, fetchFn: async () => { throw new Error("offline"); }, timeoutMs: 300 });
+    const r2 = await a2.fetchSymbols("gold");
+    if (r2.source !== "cache") throw new Error("expected cache, got " + r2.source);
+    if (!r2.quotes.length || r2.quotes[0].symbol !== "GC=F") throw new Error("cached quotes wrong");
+  });
   run("Rate limiting: lock after 5 fails", () => {
     for (let i = 0; i < 5; i++) container.auth.login("viewer", "wrongpass1");
     const sixth = container.auth.login("viewer", "wrongpass1");

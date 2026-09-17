@@ -169,9 +169,22 @@ export class YahooFinanceAdapter {
     const url = "https://query1.finance.yahoo.com/v1/finance/search?q=" + encodeURIComponent(q) +
       "&quotesCount=30&newsCount=0&listsCount=0";
     const res = await this._request(url, parseYahooQuotes);
-    if (res.ok) return res;
+    if (res.ok) {
+      res.source = "live";
+      try { this.settings.set("yahoo_symbols_cache", { at: Date.now(), quotes: res.quotes }); } catch (e) { /* ignore */ }
+      return res;
+    }
+    let cache = null;
+    try { cache = this.settings.get("yahoo_symbols_cache"); } catch (e) { cache = null; }
+    if (cache && cache.quotes && cache.quotes.length) {
+      return {
+        ok: true, source: "cache", quotes: cache.quotes,
+        msg: "Yahoo unreachable (" + (res.lastError || "network") + ") — using the cached symbol list from " +
+          new Date(cache.at).toLocaleString() + "."
+      };
+    }
     return {
-      ok: true, fallback: true,
+      ok: true, fallback: true, source: "builtin",
       quotes: FALLBACK_SYMBOLS.slice(),
       msg: "Yahoo search unreachable (" + (res.lastError || "network") + ") — showing the built-in Yahoo symbol list instead."
     };
