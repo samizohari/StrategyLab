@@ -5,7 +5,7 @@
 import { U } from "../core/utils.js";
 
 export class SimulationEngine {
-  _closeTrade(cfg, st, i, price, reason) {
+  _closeTrade(cfg, st, i, price, reason, exitSrc) {
     const pos = st.pos, cm = cfg.cm;
     const fee = pos.qty * pos.entry * (cm.feePct || 0) / 100;
     const pnl = pos.dir * pos.qty * (price - pos.entry) - fee;
@@ -16,7 +16,7 @@ export class SimulationEngine {
       id: U.uuid(), dir: pos.dir, entryBar: pos.entryBar, exitBar: i,
       entryDate: pos.entryDate, exitDate: cfg.ctx.bars[i].d,
       entry: U.round(pos.entry, 4), exit: U.round(price, 4), qty: U.round(pos.qty, 6),
-      pnl: U.round(pnl, 2), pnlPct: U.round(pnlPct, 4), reason, src: pos.src,
+      pnl: U.round(pnl, 2), pnlPct: U.round(pnlPct, 4), reason, src: pos.src, exitSrc: exitSrc || null,
       holdBars: i - pos.entryBar
     });
     st.equity = st.cash;
@@ -153,12 +153,14 @@ export class SimulationEngine {
       if (i >= cfg.warmup) {
         const s = cfg.evaluate(cfg.strategy, ctx, i, st.combo);
         if (!st.pos) {
-          if (!st.halted && st.pause <= 0 && dailyOK && i > st.lastExitBar && s.dir !== 0) {
+          /* s.exitOnly signals may close an opposite position but never open one
+             (e.g. RSI bands: SELL above 70 means "exit the long", not "short"). */
+          if (!st.halted && st.pause <= 0 && dailyOK && i > st.lastExitBar && s.dir !== 0 && !s.exitOnly) {
             const opened = this._openPosition(cfg, st, i, s.dir, s.src);
             if (!opened) st.skipped = (st.skipped || 0) + 1;
           }
         } else if (s.dir === -st.pos.dir) {
-          this._closeTrade(cfg, st, i, ctx.closes[i], "signal reversal");
+          this._closeTrade(cfg, st, i, ctx.closes[i], s.exitOnly ? "signal exit (sell)" : "signal reversal", s.src);
           st.lastExitBar = i;
         }
       }

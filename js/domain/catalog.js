@@ -15,12 +15,13 @@ export const LOGIC_META = {
   },
   RSI: {
     label: "RSI Reversion / Momentum",
-    help: "RSI (Wilder). Reversion buys when RSI exits oversold, shorts at overbought. Momentum trades the opposite.",
+    help: "RSI (Wilder). Reversion buys when RSI exits oversold, shorts at overbought. Momentum trades the opposite. Level bands is the plain threshold rule: BUY as soon as RSI drops below the oversold level, SELL when it rises above the overbought level.",
     params: [
       { key: "period", label: "RSI period", type: "number", min: 2, max: 100, step: 1, def: 14 },
       { key: "overbought", label: "Overbought level", type: "number", min: 55, max: 95, step: 1, def: 70 },
       { key: "oversold", label: "Oversold level", type: "number", min: 5, max: 45, step: 1, def: 30 },
-      { key: "mode", label: "Mode", type: "select", opts: [["reversion", "Mean reversion"], ["momentum", "Momentum"]], def: "reversion" }
+      { key: "mode", label: "Mode", type: "select", opts: [["reversion", "Mean reversion"], ["momentum", "Momentum"], ["bands", "Level bands (buy < oversold, sell > overbought)"]], def: "reversion" },
+      { key: "longOnly", label: "Long only", type: "bool", def: true, help: "Level bands only. On = buy below oversold and sell (close) above overbought. Off = also short above overbought instead of only exiting." }
     ]
   },
   MACD: {

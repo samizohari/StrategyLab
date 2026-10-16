@@ -23,7 +23,9 @@ export function makeContext(bars) {
 
 const nan = v => v == null || isNaN(v);
 const ZERO = { dir: 0, score: 0, src: "" };
-const sig = (dir, score, src) => ({ dir, score, src: src || "" });
+/* flags may carry { exitOnly: true }: the signal may close an opposite position
+   but must never open a new one (used by "sell = exit" rules such as RSI bands). */
+const sig = (dir, score, src, flags) => Object.assign({ dir, score, src: src || "" }, flags || {});
 
 function evalBase(sl, ctx, i) {
   const p = sl.params || {};
@@ -48,6 +50,14 @@ function evalBase(sl, ctx, i) {
       if (nan(r)) return ZERO;
       const ob = +p.overbought, os = +p.oversold;
       const pr = nan(arr[i - 1]) ? r : arr[i - 1];
+      if (p.mode === "bands") {
+        /* Plain level rule: BUY while RSI < oversold, SELL when RSI > overbought.
+           Long-only (default) treats the overbought reading as an exit, not a short. */
+        const longOnly = p.longOnly !== false;
+        if (r < os) return sig(1, os - r, "RSI<" + os + " buy");
+        if (r > ob) return sig(-1, r - ob, "RSI>" + ob + (longOnly ? " sell/exit" : " sell"), longOnly ? { exitOnly: true } : null);
+        return ZERO;
+      }
       if (p.mode === "reversion") {
         if (pr >= os && r < os) return sig(1, os - r, "RSI exit oversold");
         if (pr <= ob && r > ob) return sig(-1, r - ob, "RSI exit overbought");
@@ -136,8 +146,14 @@ function resolveMembers(combine, resolve) {
 function memberSignals(combine, ctx, i, resolve, evalFull) {
   return resolveMembers(combine, resolve).map(m => {
     const s = evalFull(m, ctx, i);
-    return { strat: m, dir: s.dir, score: s.score, src: s.src };
+    return { strat: m, dir: s.dir, score: s.score, src: s.src, exitOnly: !!s.exitOnly };
   });
+}
+/* A combined signal is exit-only when every member backing that direction is
+   exit-only, so "sell = close the long" rules survive combinations. */
+function comboFlags(mems, dir) {
+  const backers = mems.filter(m => m.dir === dir);
+  return backers.length && backers.every(m => m.exitOnly) ? { exitOnly: true } : null;
 }
 function evalCombo(strategy, ctx, i, comboState, resolve, evalFull) {
   const cb = strategy.combine;
@@ -155,19 +171,21 @@ function evalCombo(strategy, ctx, i, comboState, resolve, evalFull) {
       const d0 = dirs[0].dir;
       for (let k = 1; k < dirs.length; k++) if (dirs[k].dir !== d0) return ZERO;
       let sc = 0; mems.forEach(m => { sc += m.dir * w(m); });
-      return sig(d0, sc, "AND consensus");
+      return sig(d0, sc, "AND consensus", comboFlags(mems, d0));
     }
     case "OR": {
       if (!anyNonZero()) return ZERO;
       let sc2 = 0; mems.forEach(m => { sc2 += m.dir * w(m); });
       if (sc2 === 0) return ZERO;
-      return sig(sc2 > 0 ? 1 : -1, Math.abs(sc2), "OR trigger");
+      const d0r = sc2 > 0 ? 1 : -1;
+      return sig(d0r, Math.abs(sc2), "OR trigger", comboFlags(mems, d0r));
     }
     case "WEIGHTED": {
       let sc3 = 0, act = 0;
       mems.forEach(m => { if (m.dir !== 0) { sc3 += m.dir * w(m); act += w(m); } });
       if (act === 0 || Math.abs(sc3) < +cb.threshold) return ZERO;
-      return sig(sc3 > 0 ? 1 : -1, Math.abs(sc3), "Weighted vote");
+      const d3 = sc3 > 0 ? 1 : -1;
+      return sig(d3, Math.abs(sc3), "Weighted vote", comboFlags(mems, d3));
     }
     case "SEQUENTIAL": {
       if (!comboState.seq) comboState.seq = { dir: 0, countdown: 0 };

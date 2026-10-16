@@ -106,7 +106,8 @@ The previous single-file build relied on a global `GPB` namespace; the modular b
 ## Features
 
 - **Data** — CSV/JSON import (flexible headers, dedupe, validation), manual bars, seeded demo generator, CSV export, date slicing, **Yahoo Finance live import** (any symbol, 1y–max daily history) with a Refresh button — direct calls are CORS-blocked, so the app auto-falls back to public CORS proxies (allorigins → corsproxy.io).
-- **Strategies** — 7-step wizard (type → logic → combination → risk → capital → help → review): MA cross (SMA/EMA), RSI, MACD, Bollinger, S/R breakout, **Trendline** (buy above the rising bullish low-regression line, sell below the falling bearish high-regression line); param tooltips and Markdown help docs throughout.
+- **Strategies** — 7-step wizard (type → logic → combination → risk → capital → help → review): MA cross (SMA/EMA), RSI, MACD, Bollinger, S/R breakout, **Trendline** (buy above the rising bullish low-regression line, sell below the falling bearish high-regression line), RSI **level bands** (buy below the oversold level, sell above the overbought level — long-only by default, so the overbought reading exits instead of shorting); param tooltips and Markdown help docs throughout.
+- **AI Advisor** — offline deterministic recommendations from live market state, plus optional LLM generation (OpenAI-compatible endpoint); ships with AI-created presets such as *Trendline Follower (AI)* and *RSI 30/70 Dip Buyer (AI)* (buy RSI < 30, sell RSI > 70).
 - **Combination engine** — AND consensus, OR, WEIGHTED vote (+threshold), SEQUENTIAL trigger/confirm.
 - **Risk rules** — fixed %/ATR stops, fixed %/trailing take-profit, risk-per-trade sizing, %-of-equity / fixed-units / Kelly sizing, position cap, max daily loss halt, consecutive-loss pause, drawdown halt, compounding, fees.
 - **Engine** — intrabar stops with conservative both-touch handling, signal-flip exits, same-bar re-entry cooldown, mark-to-market equity, trade log, async with progress/ETA; ~290k bars/s engine throughput; 10k+ bars comfortably.
@@ -114,7 +115,7 @@ The previous single-file build relied on a global `GPB` namespace; the modular b
 - **Analysis** — comparison matrix + ranking + radar + equity overlay, **regime heatmap**, scenario analysis on auto-detected bull/bear/sideways segments, parameter optimizer (grid search), risk dashboard.
 - **Automation** — price/MA/RSI alerts with browser notifications, scheduled recurring backtests (tab-open), printable PDF reports, CSV/JSON exports.
 - **Security** — salted SHA-256 (pure JS), session tokens + inactivity timeout, RBAC (ADMIN/ANALYST/VIEWER), login rate limiting (5/min), XSS-escaped rendering, full audit log with rotation + archives, JSON backup/restore.
-- **Quality** — self-test suite (22 assertions, headless-capable) + performance benchmark in Admin → Tests & Benchmark.
+- **Quality** — self-test suite (51 assertions, headless-capable) + performance benchmark in Admin → Tests & Benchmark.
 
 ---
 

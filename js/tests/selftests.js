@@ -248,6 +248,53 @@ export function runAll(container) {
       container.strategies.repo.save(list.slice(0, len));
     }
   });
+  /* --- AI strategy: RSI level bands (buy < 30, sell > 70) --- */
+  const bandBars = () => {
+    const cs = []; let p = 1000;
+    for (let i = 0; i < 40; i++) { p *= 1.001; cs.push(p); }   // warm-up
+    for (let i = 0; i < 12; i++) { p *= 0.975; cs.push(p); }   // sell-off -> RSI < 30
+    for (let i = 0; i < 20; i++) { p *= 1.02; cs.push(p); }    // rally -> RSI > 70
+    return mkBars(cs, { hw: 0.006, lw: 0.006 });
+  };
+  const bandStrategy = longOnly => simpleStrategy(container, {
+    name: "RSI band test",
+    strategyLogic: { type: "RSI", params: { period: 14, overbought: 70, oversold: 30, mode: "bands", longOnly: longOnly } },
+    riskManagement: { stopType: "none", stopLoss: 2, stopATR: 2, tpType: "none", takeProfit: 4, trailActivate: 2, trailDist: 1.5, riskPerTrade: 1, maxDailyLoss: 99, maxConsecLosses: 99, pauseBars: 1 },
+    capitalManagement: Object.assign({}, capital, { maxDrawdown: 99 })
+  });
+
+  run("RSI bands: buys below 30, sells above 70 (long only)", () => {
+    const bars = bandBars();
+    const st = runSim(bandStrategy(true), bars);
+    if (!st.trades.length) throw new Error("no trades taken");
+    const t = st.trades[0];
+    if (t.dir !== 1) throw new Error("first trade must be a long, dir=" + t.dir);
+    if (String(t.src).indexOf("RSI<30") !== 0) throw new Error("entry src=" + t.src + " (expected RSI<30 buy)");
+    if (t.reason !== "signal exit (sell)") throw new Error("exit reason=" + t.reason);
+    if (String(t.exitSrc).indexOf("RSI>70") !== 0) throw new Error("exit src=" + t.exitSrc + " (expected RSI>70 sell/exit)");
+    if (st.trades.some(x => x.dir === -1)) throw new Error("long-only mode opened a short");
+  });
+  run("RSI bands: longOnly off also shorts overbought", () => {
+    const st = runSim(bandStrategy(false), bandBars());
+    if (!st.trades.some(x => x.dir === -1)) throw new Error("expected a short entry on the overbought reading");
+    if (!st.trades.some(x => x.reason === "signal reversal")) throw new Error("overbought should reverse into a short");
+  });
+  run("AI strategy 'RSI 30/70 Dip Buyer' is seeded and valid", () => {
+    const s = container.strategies.all().find(x => x.name === "RSI 30/70 Dip Buyer (AI)");
+    if (!s) throw new Error("seeded AI RSI strategy missing");
+    if (s.strategyLogic.params.mode !== "bands" || s.strategyLogic.params.oversold !== 30 || s.strategyLogic.params.overbought !== 70)
+      throw new Error("wrong params: " + JSON.stringify(s.strategyLogic.params));
+    const errs = container.strategies.validate(s);
+    if (errs.length) throw new Error(errs.join(";"));
+    if (!/RSI|bands|oversold/i.test(composeStrategyHelp(s))) throw new Error("generated help does not describe the rule");
+  });
+  run("Advisor offers the RSI 30/70 bands recommendation", () => {
+    const recs = container.advisor.localRecommendations();
+    const r = recs.find(x => (x.draft.strategyLogic.params || {}).mode === "bands");
+    if (!r) throw new Error("no bands recommendation");
+    if (r.draft.strategyLogic.params.oversold !== 30 || r.draft.strategyLogic.params.overbought !== 70) throw new Error("wrong levels");
+    if (container.strategies.validate(r.draft).length) throw new Error("draft invalid");
+  });
   run("LLM JSON parser: fenced + trailing prose", () => {
     const txt = "Sure! Here you go:\n```json\n{\"name\":\"A\",\"strategyLogic\":{\"type\":\"RSI\",\"params\":{}}}\n```\nGood luck!";
     const p = parseLLMJSON(txt);

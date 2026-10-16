@@ -56,7 +56,8 @@ Reply with ONLY a JSON object (no markdown fences, no commentary) shaped as:
 }
 Parameter rules:
 - MA_CROSS params: fastMA, slowMA, fastType, slowType ("sma"|"ema"), signalType ("cross"|"above"); fastMA < slowMA.
-- RSI params: period, overbought, oversold, mode ("reversion"|"momentum"); oversold < overbought.
+- RSI params: period, overbought, oversold, mode ("reversion"|"momentum"|"bands"), longOnly (true|false, only used by "bands"); oversold < overbought.
+  mode "bands" is the plain threshold rule: buy as soon as RSI falls below oversold, and with longOnly true the overbought reading CLOSES the long (it does not short). Use it when the user asks e.g. "buy below RSI 30 and sell above RSI 70".
 - MACD params: fast, slow, signal, mode ("cross"|"hist"|"above"); fast < slow.
 - BOLL params: period, mult, mode ("breakout"|"reversion").
 - S_R_BREAK params: lookback, mode ("breakout"|"bounce").
