@@ -160,7 +160,7 @@ export class SimulationEngine {
             if (!opened) st.skipped = (st.skipped || 0) + 1;
           }
         } else if (s.dir === -st.pos.dir) {
-          this._closeTrade(cfg, st, i, ctx.closes[i], s.exitOnly ? "signal exit (sell)" : "signal reversal", s.src);
+          this._closeTrade(cfg, st, i, ctx.closes[i], s.exitOnly ? "signal exit" : "signal reversal", s.src);
           st.lastExitBar = i;
         }
       }

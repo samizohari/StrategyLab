@@ -15,13 +15,14 @@ export const LOGIC_META = {
   },
   RSI: {
     label: "RSI Reversion / Momentum",
-    help: "RSI (Wilder). Reversion buys when RSI exits oversold, shorts at overbought. Momentum trades the opposite. Level bands is the plain threshold rule: BUY as soon as RSI drops below the oversold level, SELL when it rises above the overbought level.",
+    help: "RSI (Wilder). Reversion buys when RSI exits oversold, shorts at overbought. Momentum trades the opposite. Level bands is the plain threshold rule: with Direction = Long, BUY as soon as RSI drops below the oversold level and SELL when it rises above the overbought level; with Direction = Short the rule is mirrored — SELL (short) above the overbought level and BUY back (cover) below the oversold level.",
     params: [
       { key: "period", label: "RSI period", type: "number", min: 2, max: 100, step: 1, def: 14 },
       { key: "overbought", label: "Overbought level", type: "number", min: 55, max: 95, step: 1, def: 70 },
       { key: "oversold", label: "Oversold level", type: "number", min: 5, max: 45, step: 1, def: 30 },
       { key: "mode", label: "Mode", type: "select", opts: [["reversion", "Mean reversion"], ["momentum", "Momentum"], ["bands", "Level bands (buy < oversold, sell > overbought)"]], def: "reversion" },
-      { key: "longOnly", label: "Long only", type: "bool", def: true, help: "Level bands only. On = buy below oversold and sell (close) above overbought. Off = also short above overbought instead of only exiting." }
+      { key: "side", label: "Direction (level bands)", type: "select", opts: [["long", "Long — buy oversold, sell overbought"], ["short", "Short — sell overbought, buy back oversold"]], def: "long", help: "Level bands only. Long = buy below oversold and sell above overbought; Short = the mirror (short above overbought, cover below oversold)." },
+      { key: "longOnly", label: "Opposite band exits only", type: "bool", def: true, help: "Level bands only. On = the opposite band closes the position instead of flipping it. Off = the opposite band flips the trade (long becomes short, or short becomes long)." }
     ]
   },
   MACD: {

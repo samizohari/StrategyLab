@@ -99,7 +99,7 @@ export class StrategyService {
     E.desc = "Combination: EMA crossover AND MACD cross must agree (consensus).";
     this.repo.save([A, B, C, D, E]);
     this.ensureTrendlineSeed();
-    this.ensureRsiBandSeed();
+    this.ensureRsiBandSeeds();
   }
 
   /** AI-created Trendline strategy (added once, even for existing installs). */
@@ -117,21 +117,37 @@ export class StrategyService {
     return s;
   }
 
-  /** AI-created RSI level-band strategy: buy below RSI 30, sell above RSI 70.
-   *  Added once, even for existing installs (same contract as ensureTrendlineSeed). */
-  ensureRsiBandSeed() {
+  /** AI-created RSI level-band pair, added once even for existing installs
+   *  (same contract as ensureTrendlineSeed):
+   *   long  — buy below RSI 30, sell above RSI 70
+   *   short — the mirror: sell (short) above RSI 70, buy back below RSI 30 */
+  ensureRsiBandSeeds() {
     const all = this.repo.all();
-    if (all.some(s => s.strategyLogic && s.strategyLogic.type === "RSI" && (s.strategyLogic.params || {}).mode === "bands")) return null;
-    const s = this.create("RSI 30/70 Dip Buyer (AI)", "RSI");
-    s.strategyLogic.params = { period: 14, overbought: 70, oversold: 30, mode: "bands", longOnly: true };
-    // the RSI > 70 sell is the profit exit, so no fixed take-profit is layered on top
-    s.riskManagement = { stopType: "atr", stopLoss: 2, stopATR: 2.5, tpType: "none", takeProfit: 4, trailActivate: 2, trailDist: 1.5, riskPerTrade: 1, maxDailyLoss: 4, maxConsecLosses: 3, pauseBars: 5 };
-    s.capitalManagement = { initialCapital: 10000, positionSizing: "risk", positionSize: 10, fixedUnits: 10, maxPositionPct: 50, compounding: true, maxDrawdown: 25, feePct: 0 };
-    s.desc = "Rule: BUY when RSI(14) drops below 30 (oversold); SELL when RSI(14) rises above 70 (overbought). Long only — the overbought reading closes the position instead of shorting. A 2.5x ATR stop is the only other exit; 1% risk per trade, 4% daily loss cap.";
-    all.push(s);
+    const has = side => all.some(s => s.strategyLogic && s.strategyLogic.type === "RSI" &&
+      (s.strategyLogic.params || {}).mode === "bands" && ((s.strategyLogic.params || {}).side || "long") === side);
+    const baseRisk = { stopType: "atr", stopLoss: 2, stopATR: 2.5, tpType: "none", takeProfit: 4, trailActivate: 2, trailDist: 1.5, riskPerTrade: 1, maxDailyLoss: 4, maxConsecLosses: 3, pauseBars: 5 };
+    const baseCap = { initialCapital: 10000, positionSizing: "risk", positionSize: 10, fixedUnits: 10, maxPositionPct: 50, compounding: true, maxDrawdown: 25, feePct: 0 };
+    const added = [];
+    if (!has("long")) {
+      const s = this.create("RSI 30/70 Dip Buyer (AI)", "RSI");
+      s.strategyLogic.params = { period: 14, overbought: 70, oversold: 30, mode: "bands", side: "long", longOnly: true };
+      s.riskManagement = Object.assign({}, baseRisk);
+      s.capitalManagement = Object.assign({}, baseCap);
+      s.desc = "Rule: BUY when RSI(14) drops below 30 (oversold); SELL when RSI(14) rises above 70 (overbought). The overbought reading closes the position instead of shorting. A 2.5x ATR stop is the only other exit; 1% risk per trade, 4% daily loss cap.";
+      all.push(s); added.push(s);
+    }
+    if (!has("short")) {
+      const s = this.create("RSI 70/30 Rally Fader (AI)", "RSI");
+      s.strategyLogic.params = { period: 14, overbought: 70, oversold: 30, mode: "bands", side: "short", longOnly: true };
+      s.riskManagement = Object.assign({}, baseRisk);
+      s.capitalManagement = Object.assign({}, baseCap);
+      s.desc = "Reverse of the RSI 30/70 Dip Buyer: SELL short when RSI(14) rises above 70 (overbought); BUY back (cover) when RSI(14) drops below 30 (oversold). The oversold reading closes the short instead of going long. A 2.5x ATR stop is the only other exit; 1% risk per trade, 4% daily loss cap.";
+      all.push(s); added.push(s);
+    }
+    if (!added.length) return null;
     this.repo.save(all);
-    this.log.add("INFO", "system", "STRATEGY_CREATE", "AI-created RSI 30/70 Dip Buyer strategy added");
-    return s;
+    this.log.add("INFO", "system", "STRATEGY_CREATE", "AI-created RSI level-band strategies added: " + added.map(s => s.name).join(", "));
+    return added;
   }
 
   /** Lazy evaluator wired to this service's repository (dependency injection). */

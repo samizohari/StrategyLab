@@ -160,13 +160,21 @@ export class AdvisorService {
         { positionSizing: "risk", maxPositionPct: 55, compounding: true }),
       reasoning: "Rule: buy when price closes ABOVE the rising bullish trendline (regression of lows); sell when it closes BELOW the falling bearish trendline (regression of highs). Volatility " + m.volLabel + " (" + m.annVol + "% ann.) — the ATR stop is scaled to it, profit is trailed, 1.2% risk per trade."
     });
+    const bandRisk = { stopType: "atr", stopATR: 2.5 * volAdjStop, tpType: "none", takeProfit: 4, trailActivate: 2, trailDist: 1.5, riskPerTrade: 1, maxDailyLoss: 4, maxConsecLosses: 3, pauseBars: 5 };
+    const bandCap = { positionSizing: "risk", maxPositionPct: 50, compounding: true };
     out.push({
-      kind: "RSI level bands (AI)",
+      kind: "RSI level bands — long (AI)",
       draft: draft("AI: RSI 30/70 Dip Buyer", "RSI",
-        { period: 14, overbought: 70, oversold: 30, mode: "bands", longOnly: true },
-        { stopType: "atr", stopATR: 2.5 * volAdjStop, tpType: "none", takeProfit: 4, trailActivate: 2, trailDist: 1.5, riskPerTrade: 1, maxDailyLoss: 4, maxConsecLosses: 3, pauseBars: 5 },
-        { positionSizing: "risk", maxPositionPct: 50, compounding: true }),
-      reasoning: "Rule: BUY when RSI(14) drops below 30 (oversold), SELL when it rises above 70 (overbought). Long only, so the overbought reading closes the position instead of shorting a rally; the RSI exit is the profit target (no fixed take-profit on top), with a 2.5x ATR stop as disaster protection. Risk 1% per trade, max 4% daily."
+        { period: 14, overbought: 70, oversold: 30, mode: "bands", side: "long", longOnly: true },
+        bandRisk, bandCap),
+      reasoning: "Rule: BUY when RSI(14) drops below 30 (oversold), SELL when it rises above 70 (overbought). The overbought reading closes the position instead of shorting a rally; the RSI exit is the profit target (no fixed take-profit on top), with a 2.5x ATR stop as disaster protection. Risk 1% per trade, max 4% daily."
+    });
+    out.push({
+      kind: "RSI level bands — short, reverse of the dip buyer (AI)",
+      draft: draft("AI: RSI 70/30 Rally Fader", "RSI",
+        { period: 14, overbought: 70, oversold: 30, mode: "bands", side: "short", longOnly: true },
+        bandRisk, bandCap),
+      reasoning: "Mirror of the dip buyer: SELL short when RSI(14) rises above 70 (overbought), BUY back (cover) when it drops below 30 (oversold). Best suited to ranges and bear legs where rallies fade rather than extend — in a strong bull trend the oversold cover comes late. Same 2.5x ATR stop, 1% risk, 4% daily cap."
     });
     return out.map(r => Object.assign(r, { market: m.summary }));
   }

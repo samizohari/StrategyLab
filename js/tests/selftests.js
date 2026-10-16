@@ -256,9 +256,9 @@ export function runAll(container) {
     for (let i = 0; i < 20; i++) { p *= 1.02; cs.push(p); }    // rally -> RSI > 70
     return mkBars(cs, { hw: 0.006, lw: 0.006 });
   };
-  const bandStrategy = longOnly => simpleStrategy(container, {
+  const bandStrategy = (longOnly, side) => simpleStrategy(container, {
     name: "RSI band test",
-    strategyLogic: { type: "RSI", params: { period: 14, overbought: 70, oversold: 30, mode: "bands", longOnly: longOnly } },
+    strategyLogic: { type: "RSI", params: { period: 14, overbought: 70, oversold: 30, mode: "bands", side: side || "long", longOnly: longOnly } },
     riskManagement: { stopType: "none", stopLoss: 2, stopATR: 2, tpType: "none", takeProfit: 4, trailActivate: 2, trailDist: 1.5, riskPerTrade: 1, maxDailyLoss: 99, maxConsecLosses: 99, pauseBars: 1 },
     capitalManagement: Object.assign({}, capital, { maxDrawdown: 99 })
   });
@@ -270,7 +270,7 @@ export function runAll(container) {
     const t = st.trades[0];
     if (t.dir !== 1) throw new Error("first trade must be a long, dir=" + t.dir);
     if (String(t.src).indexOf("RSI<30") !== 0) throw new Error("entry src=" + t.src + " (expected RSI<30 buy)");
-    if (t.reason !== "signal exit (sell)") throw new Error("exit reason=" + t.reason);
+    if (t.reason !== "signal exit") throw new Error("exit reason=" + t.reason);
     if (String(t.exitSrc).indexOf("RSI>70") !== 0) throw new Error("exit src=" + t.exitSrc + " (expected RSI>70 sell/exit)");
     if (st.trades.some(x => x.dir === -1)) throw new Error("long-only mode opened a short");
   });
@@ -278,6 +278,28 @@ export function runAll(container) {
     const st = runSim(bandStrategy(false), bandBars());
     if (!st.trades.some(x => x.dir === -1)) throw new Error("expected a short entry on the overbought reading");
     if (!st.trades.some(x => x.reason === "signal reversal")) throw new Error("overbought should reverse into a short");
+  });
+  const reverseBandBars = () => {
+    const cs = []; let p = 1000;
+    for (let i = 0; i < 40; i++) { p *= 1.001; cs.push(p); }   // warm-up
+    for (let i = 0; i < 15; i++) { p *= 1.02; cs.push(p); }    // rally -> RSI > 70
+    for (let i = 0; i < 22; i++) { p *= 0.978; cs.push(p); }   // drop -> RSI < 30 with bars to spare
+    return mkBars(cs, { hw: 0.006, lw: 0.006 });
+  };
+  run("RSI bands reverse: shorts above 70, covers below 30", () => {
+    const st = runSim(bandStrategy(true, "short"), reverseBandBars());
+    if (!st.trades.length) throw new Error("no trades taken");
+    const t = st.trades[0];
+    if (t.dir !== -1) throw new Error("first trade must be a short, dir=" + t.dir);
+    if (String(t.src).indexOf("RSI>70 short") !== 0) throw new Error("entry src=" + t.src);
+    if (t.reason !== "signal exit") throw new Error("exit reason=" + t.reason);
+    if (String(t.exitSrc).indexOf("RSI<30 cover/exit") !== 0) throw new Error("exit src=" + t.exitSrc);
+    if (st.trades.some(x => x.dir === 1)) throw new Error("reverse mode opened a long");
+  });
+  run("RSI bands reverse: flipping off also goes long on oversold", () => {
+    const st = runSim(bandStrategy(false, "short"), reverseBandBars());
+    if (!st.trades.some(x => x.dir === 1)) throw new Error("expected a long flip on the oversold reading");
+    if (!st.trades.some(x => x.reason === "signal reversal")) throw new Error("oversold should reverse into a long");
   });
   run("AI strategy 'RSI 30/70 Dip Buyer' is seeded and valid", () => {
     const s = container.strategies.all().find(x => x.name === "RSI 30/70 Dip Buyer (AI)");
@@ -288,12 +310,25 @@ export function runAll(container) {
     if (errs.length) throw new Error(errs.join(";"));
     if (!/RSI|bands|oversold/i.test(composeStrategyHelp(s))) throw new Error("generated help does not describe the rule");
   });
-  run("Advisor offers the RSI 30/70 bands recommendation", () => {
+  run("AI strategy reverse 'RSI 70/30 Rally Fader' mirrors the dip buyer", () => {
+    const s = container.strategies.all().find(x => x.name === "RSI 70/30 Rally Fader (AI)");
+    if (!s) throw new Error("seeded reverse strategy missing");
+    const p = s.strategyLogic.params;
+    if (p.mode !== "bands" || p.side !== "short" || p.oversold !== 30 || p.overbought !== 70) throw new Error("wrong params: " + JSON.stringify(p));
+    const dip = container.strategies.all().find(x => x.name === "RSI 30/70 Dip Buyer (AI)");
+    if (!dip || dip.strategyLogic.params.side !== "long") throw new Error("dip buyer must stay long");
+    if (container.strategies.validate(s).length) throw new Error("reverse strategy invalid");
+    if (!/short|cover|mirror|reverse/i.test(composeStrategyHelp(s))) throw new Error("generated help does not describe the reverse rule");
+  });
+  run("Advisor offers both RSI level-band directions", () => {
     const recs = container.advisor.localRecommendations();
-    const r = recs.find(x => (x.draft.strategyLogic.params || {}).mode === "bands");
-    if (!r) throw new Error("no bands recommendation");
-    if (r.draft.strategyLogic.params.oversold !== 30 || r.draft.strategyLogic.params.overbought !== 70) throw new Error("wrong levels");
-    if (container.strategies.validate(r.draft).length) throw new Error("draft invalid");
+    const bands = recs.filter(x => (x.draft.strategyLogic.params || {}).mode === "bands");
+    const sides = bands.map(x => x.draft.strategyLogic.params.side).sort().join(",");
+    if (sides !== "long,short") throw new Error("expected long+short recs, got: " + sides);
+    bands.forEach(r => {
+      if (r.draft.strategyLogic.params.oversold !== 30 || r.draft.strategyLogic.params.overbought !== 70) throw new Error("wrong levels on " + r.draft.name);
+      if (container.strategies.validate(r.draft).length) throw new Error("draft invalid: " + r.draft.name);
+    });
   });
   run("LLM JSON parser: fenced + trailing prose", () => {
     const txt = "Sure! Here you go:\n```json\n{\"name\":\"A\",\"strategyLogic\":{\"type\":\"RSI\",\"params\":{}}}\n```\nGood luck!";

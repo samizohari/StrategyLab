@@ -51,11 +51,17 @@ function evalBase(sl, ctx, i) {
       const ob = +p.overbought, os = +p.oversold;
       const pr = nan(arr[i - 1]) ? r : arr[i - 1];
       if (p.mode === "bands") {
-        /* Plain level rule: BUY while RSI < oversold, SELL when RSI > overbought.
-           Long-only (default) treats the overbought reading as an exit, not a short. */
-        const longOnly = p.longOnly !== false;
+        /* Plain level rule, long: BUY while RSI < oversold, SELL when RSI > overbought.
+           Mirrored rule, short: SELL (short) while RSI > overbought, cover when RSI < oversold.
+           "Opposite band exits only" (default) closes the position instead of flipping it. */
+        const noFlip = p.longOnly !== false;
+        if (p.side === "short") {
+          if (r > ob) return sig(-1, r - ob, "RSI>" + ob + " short");
+          if (r < os) return sig(1, os - r, "RSI<" + os + " cover/exit", noFlip ? { exitOnly: true } : null);
+          return ZERO;
+        }
         if (r < os) return sig(1, os - r, "RSI<" + os + " buy");
-        if (r > ob) return sig(-1, r - ob, "RSI>" + ob + (longOnly ? " sell/exit" : " sell"), longOnly ? { exitOnly: true } : null);
+        if (r > ob) return sig(-1, r - ob, "RSI>" + ob + (noFlip ? " sell/exit" : " sell"), noFlip ? { exitOnly: true } : null);
         return ZERO;
       }
       if (p.mode === "reversion") {
