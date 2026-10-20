@@ -38,8 +38,12 @@ startPage("strategies", {
           combo = '<div class="muted" style="margin-top:4px"><span class="badge gold">' + U.esc(s.combine.logic) + "</span> with " + mems.map(U.esc).join(", ") + "</div>";
         }
         const rm = s.riskManagement, cm = s.capitalManagement;
-        const riskTxt = (rm.stopType === "pct" ? "SL " + rm.stopLoss + "%" : rm.stopType === "atr" ? "SL " + rm.stopATR + "×ATR" : "no SL") +
-          " · " + (rm.tpType === "pct" ? "TP " + rm.takeProfit + "%" : rm.tpType === "trail" ? "trailing " + rm.trailDist + "%" : "no TP") +
+        const shortTp = (rm.shortTpType && rm.shortTpType !== "same")
+          ? " (short " + (rm.shortTpType === "pct" ? rm.shortTakeProfit + "%" : rm.shortTpType === "pips" ? rm.shortTakeProfitPips + " pips" : "none") + ")"
+          : "";
+        const riskTxt = (rm.stopType === "pct" ? "SL " + rm.stopLoss + "%" : rm.stopType === "pips" ? "SL " + rm.stopPips + " pips" : rm.stopType === "atr" ? "SL " + rm.stopATR + "×ATR" : "no SL") +
+          " · " + (rm.tpType === "pct" ? "TP " + rm.takeProfit + "%" : rm.tpType === "pips" ? "TP " + rm.takeProfitPips + " pips" : rm.tpType === "trail" ? "trailing " + rm.trailDist + "%" : "no TP") +
+          shortTp +
           " · risk " + rm.riskPerTrade + "% · dailyLoss " + rm.maxDailyLoss + "%";
         const capTxt = (cm.positionSizing === "risk" ? "risk-based" : cm.positionSizing === "percentage" ? cm.positionSize + "%" : cm.positionSizing === "fixed" ? cm.fixedUnits + " units" : "Kelly") +
           " · maxPos " + cm.maxPositionPct + "% · " + (cm.compounding ? "compounding" : "flat") + " · cap $" + U.num(cm.initialCapital, 0);

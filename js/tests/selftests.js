@@ -248,14 +248,17 @@ export function runAll(container) {
       container.strategies.repo.save(list.slice(0, len));
     }
   });
-  /* --- AI strategy: RSI level bands (buy < 30, sell > 70) --- */
-  const bandBars = () => {
-    const cs = []; let p = 1000;
-    for (let i = 0; i < 40; i++) { p *= 1.001; cs.push(p); }   // warm-up
-    for (let i = 0; i < 12; i++) { p *= 0.975; cs.push(p); }   // sell-off -> RSI < 30
-    for (let i = 0; i < 20; i++) { p *= 1.02; cs.push(p); }    // rally -> RSI > 70
-    return mkBars(cs, { hw: 0.006, lw: 0.006 });
-  };
+  /* --- AI strategy: RSI level bands + bracket rules --- */
+  const mkSeries = steps => { const cs = []; let p = 1000; steps.forEach(r => { p *= r; cs.push(p); }); return cs; };
+  const neutralChop = n => { const a = []; for (let i = 0; i < n; i++) a.push(i % 2 ? 0.9984 : 1.0016); return a; };
+  const bandBars = () => mkBars(mkSeries(neutralChop(40).concat(
+    Array(12).fill(0.975),   // sell-off -> RSI < 30
+    Array(20).fill(1.02)     // rally -> RSI > 70
+  )), { hw: 0.006, lw: 0.006 });
+  const reverseBandBars = () => mkBars(mkSeries(neutralChop(40).concat(
+    Array(15).fill(1.02),    // rally -> RSI > 70
+    Array(22).fill(0.978)    // drop -> RSI < 30
+  )), { hw: 0.006, lw: 0.006 });
   const bandStrategy = (longOnly, side) => simpleStrategy(container, {
     name: "RSI band test",
     strategyLogic: { type: "RSI", params: { period: 14, overbought: 70, oversold: 30, mode: "bands", side: side || "long", longOnly: longOnly } },
@@ -264,8 +267,7 @@ export function runAll(container) {
   });
 
   run("RSI bands: buys below 30, sells above 70 (long only)", () => {
-    const bars = bandBars();
-    const st = runSim(bandStrategy(true), bars);
+    const st = runSim(bandStrategy(true), bandBars());
     if (!st.trades.length) throw new Error("no trades taken");
     const t = st.trades[0];
     if (t.dir !== 1) throw new Error("first trade must be a long, dir=" + t.dir);
@@ -279,13 +281,6 @@ export function runAll(container) {
     if (!st.trades.some(x => x.dir === -1)) throw new Error("expected a short entry on the overbought reading");
     if (!st.trades.some(x => x.reason === "signal reversal")) throw new Error("overbought should reverse into a short");
   });
-  const reverseBandBars = () => {
-    const cs = []; let p = 1000;
-    for (let i = 0; i < 40; i++) { p *= 1.001; cs.push(p); }   // warm-up
-    for (let i = 0; i < 15; i++) { p *= 1.02; cs.push(p); }    // rally -> RSI > 70
-    for (let i = 0; i < 22; i++) { p *= 0.978; cs.push(p); }   // drop -> RSI < 30 with bars to spare
-    return mkBars(cs, { hw: 0.006, lw: 0.006 });
-  };
   run("RSI bands reverse: shorts above 70, covers below 30", () => {
     const st = runSim(bandStrategy(true, "short"), reverseBandBars());
     if (!st.trades.length) throw new Error("no trades taken");
@@ -301,34 +296,94 @@ export function runAll(container) {
     if (!st.trades.some(x => x.dir === 1)) throw new Error("expected a long flip on the oversold reading");
     if (!st.trades.some(x => x.reason === "signal reversal")) throw new Error("oversold should reverse into a long");
   });
-  run("AI strategy 'RSI 30/70 Dip Buyer' is seeded and valid", () => {
-    const s = container.strategies.all().find(x => x.name === "RSI 30/70 Dip Buyer (AI)");
-    if (!s) throw new Error("seeded AI RSI strategy missing");
-    if (s.strategyLogic.params.mode !== "bands" || s.strategyLogic.params.oversold !== 30 || s.strategyLogic.params.overbought !== 70)
-      throw new Error("wrong params: " + JSON.stringify(s.strategyLogic.params));
-    const errs = container.strategies.validate(s);
-    if (errs.length) throw new Error(errs.join(";"));
-    if (!/RSI|bands|oversold/i.test(composeStrategyHelp(s))) throw new Error("generated help does not describe the rule");
+
+  /* bracket helpers: stop the series on the bar that first reaches the band, so the
+     next bars are the bounce we want to trade */
+  const toBand = dir => {
+    const cs = mkSeries(neutralChop(40));
+    let p = cs[cs.length - 1];
+    for (let i = 0; i < 60; i++) { p *= dir === "buy" ? 0.975 : 1.025; cs.push(p); }
+    const R = rsi(cs, 14);
+    const k = R.findIndex((v, i) => i > 20 && (dir === "buy" ? v < 30 : v > 70));
+    if (k < 0) throw new Error("series never reached the " + dir + " band");
+    return cs.slice(0, k + 1);
+  };
+  const extend = (cs, mult, n) => {
+    let p = cs[cs.length - 1];
+    for (let i = 0; i < n; i++) { p *= mult; cs.push(p); }
+    return cs;
+  };
+  const bracketBars = (dir, after, n) => mkBars(extend(toBand(dir), after, n), { hw: 0.006, lw: 0.006 });
+  const bracketStrategy = (over) => simpleStrategy(container, {
+    name: "RSI bracket test",
+    strategyLogic: { type: "RSI", params: { period: 14, overbought: 70, oversold: 30, mode: "bands", side: "both", longOnly: true, signalExit: false } },
+    riskManagement: Object.assign({
+      pipSize: 0.1, stopType: "pips", stopPips: 100, stopLoss: 2, stopATR: 2,
+      tpType: "pct", takeProfit: 0.5, takeProfitPips: 500,
+      shortTpType: "pips", shortTakeProfit: 4, shortTakeProfitPips: 500,
+      trailActivate: 2, trailDist: 1.5, riskPerTrade: 1, maxDailyLoss: 99, maxConsecLosses: 99, pauseBars: 1
+    }, over || {}),
+    capitalManagement: Object.assign({}, capital, { maxDrawdown: 99 })
   });
-  run("AI strategy reverse 'RSI 70/30 Rally Fader' mirrors the dip buyer", () => {
-    const s = container.strategies.all().find(x => x.name === "RSI 70/30 Rally Fader (AI)");
-    if (!s) throw new Error("seeded reverse strategy missing");
-    const p = s.strategyLogic.params;
-    if (p.mode !== "bands" || p.side !== "short" || p.oversold !== 30 || p.overbought !== 70) throw new Error("wrong params: " + JSON.stringify(p));
-    const dip = container.strategies.all().find(x => x.name === "RSI 30/70 Dip Buyer (AI)");
-    if (!dip || dip.strategyLogic.params.side !== "long") throw new Error("dip buyer must stay long");
-    if (container.strategies.validate(s).length) throw new Error("reverse strategy invalid");
-    if (!/short|cover|mirror|reverse/i.test(composeStrategyHelp(s))) throw new Error("generated help does not describe the reverse rule");
+
+  run("Bracket: long takes profit at +0.5%", () => {
+    const st = runSim(bracketStrategy(), bracketBars("buy", 1.02, 4));
+    const t = st.trades[0];
+    if (!t) throw new Error("no trades");
+    if (t.dir !== 1 || String(t.src).indexOf("RSI<30") !== 0) throw new Error("wrong entry: " + t.dir + " " + t.src);
+    if (t.reason !== "take-profit") throw new Error("exit reason=" + t.reason);
+    const want = t.entry * 1.005;
+    if (Math.abs(t.exit - want) > 0.01) throw new Error("exit " + t.exit + " (expected ~" + want.toFixed(3) + ")");
   });
-  run("Advisor offers both RSI level-band directions", () => {
+  run("Bracket: 100-pip stop fills 10 price units under a long", () => {
+    const st = runSim(bracketStrategy(), bracketBars("buy", 0.98, 4));
+    const t = st.trades[0];
+    if (!t) throw new Error("no trades");
+    if (t.dir !== 1) throw new Error("expected a long, dir=" + t.dir);
+    if (t.reason !== "stop-loss") throw new Error("exit reason=" + t.reason);
+    if (Math.abs((t.entry - t.exit) - 10) > 0.02) throw new Error("stop distance=" + (t.entry - t.exit).toFixed(3) + " (expected 10)");
+  });
+  run("Bracket: short uses its own 500-pip target, not the 0.5% long target", () => {
+    const st = runSim(bracketStrategy(), bracketBars("sell", 0.94, 6));
+    const t = st.trades.find(x => x.dir === -1);
+    if (!t) throw new Error("no short taken");
+    if (String(t.src).indexOf("RSI>70") !== 0) throw new Error("entry src=" + t.src);
+    if (t.reason !== "take-profit") throw new Error("exit reason=" + t.reason);
+    if (Math.abs((t.entry - t.exit) - 50) > 0.02) throw new Error("short target=" + (t.entry - t.exit).toFixed(3) + " (expected 50 = 500 pips of profit)");
+    if (t.pnl <= 0) throw new Error("short target did not produce a profit: " + t.pnl);
+  });
+  run("Bracket: band signals never close a trade", () => {
+    const bars = bracketBars("buy", 1.02, 8);
+    const st = runSim(bracketStrategy({ tpType: "none", stopType: "none" }), bars);
+    const t = st.trades[0];
+    if (!t) throw new Error("no trades");
+    if (t.reason !== "end of data") throw new Error("position closed by " + t.reason + " (expected it to run to the end)");
+    const R = rsi(bars.map(b => b.c), 14);
+    if (!R.slice(t.entryBar).some(v => v > 70)) throw new Error("series never went overbought — test proves nothing");
+  });
+
+  run("AI strategy 'RSI 30/70 Bracketed' carries the bracket rules", () => {
+    const s = container.strategies.all().find(x => x.name === "RSI 30/70 Bracketed (AI)");
+    if (!s) throw new Error("seeded bracket strategy missing");
+    const p = s.strategyLogic.params, k = s.riskManagement;
+    if (p.mode !== "bands" || p.side !== "both" || p.signalExit !== false) throw new Error("logic: " + JSON.stringify(p));
+    if (p.oversold !== 30 || p.overbought !== 70) throw new Error("levels: " + JSON.stringify(p));
+    if (k.stopType !== "pips" || k.stopPips !== 100 || k.pipSize !== 0.1) throw new Error("stop: " + JSON.stringify(k));
+    if (k.tpType !== "pct" || k.takeProfit !== 0.5) throw new Error("long TP: " + JSON.stringify(k));
+    if (k.shortTpType !== "pips" || k.shortTakeProfitPips !== 500) throw new Error("short TP: " + JSON.stringify(k));
+    if (container.strategies.validate(s).length) throw new Error("seeded strategy invalid");
+    if (!/pip|RSI|0\.5/i.test(composeStrategyHelp(s))) throw new Error("generated help does not describe the bracket");
+    const legacy = container.strategies.all().filter(x => /Dip Buyer|Rally Fader/.test(x.name));
+    if (legacy.length) throw new Error("superseded presets still present: " + legacy.map(x => x.name).join(", "));
+  });
+  run("Advisor offers the RSI bracket recommendation", () => {
     const recs = container.advisor.localRecommendations();
-    const bands = recs.filter(x => (x.draft.strategyLogic.params || {}).mode === "bands");
-    const sides = bands.map(x => x.draft.strategyLogic.params.side).sort().join(",");
-    if (sides !== "long,short") throw new Error("expected long+short recs, got: " + sides);
-    bands.forEach(r => {
-      if (r.draft.strategyLogic.params.oversold !== 30 || r.draft.strategyLogic.params.overbought !== 70) throw new Error("wrong levels on " + r.draft.name);
-      if (container.strategies.validate(r.draft).length) throw new Error("draft invalid: " + r.draft.name);
-    });
+    const r = recs.find(x => (x.draft.strategyLogic.params || {}).mode === "bands");
+    if (!r) throw new Error("no bracket recommendation");
+    const p = r.draft.strategyLogic.params, k = r.draft.riskManagement;
+    if (p.side !== "both" || p.signalExit !== false) throw new Error("logic: " + JSON.stringify(p));
+    if (k.stopType !== "pips" || k.stopPips !== 100 || k.takeProfit !== 0.5 || k.shortTakeProfitPips !== 500) throw new Error("risk: " + JSON.stringify(k));
+    if (container.strategies.validate(r.draft).length) throw new Error("draft invalid");
   });
   run("LLM JSON parser: fenced + trailing prose", () => {
     const txt = "Sure! Here you go:\n```json\n{\"name\":\"A\",\"strategyLogic\":{\"type\":\"RSI\",\"params\":{}}}\n```\nGood luck!";

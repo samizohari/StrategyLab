@@ -175,11 +175,14 @@ export function openBuilder(container, ui, id) {
         const st = document.getElementById("f-stopType").value;
         const tp = document.getElementById("f-tpType").value;
         const hid = (id, on) => { const x = document.getElementById(id); if (x) { const f = x.closest(".field"); if (f) f.style.display = on ? "block" : "none"; } };
-        hid("f-stopLoss", st === "pct"); hid("f-stopATR", st === "atr");
-        hid("f-takeProfit", tp === "pct");
+        hid("f-stopLoss", st === "pct"); hid("f-stopATR", st === "atr"); hid("f-stopPips", st === "pips");
+        hid("f-takeProfit", tp === "pct"); hid("f-takeProfitPips", tp === "pips");
         hid("f-trailActivate", tp === "trail"); hid("f-trailDist", tp === "trail");
+        const so = document.getElementById("f-shortTpType");
+        const sv = so ? so.value : "same";
+        hid("f-shortTakeProfit", sv === "pct"); hid("f-shortTakeProfitPips", sv === "pips");
       }
-      ["stopType", "tpType"].forEach(k => { const x = document.getElementById("f-" + k); if (x) x.addEventListener("change", vis); });
+      ["stopType", "tpType", "shortTpType"].forEach(k => { const x = document.getElementById("f-" + k); if (x) x.addEventListener("change", vis); });
       vis();
       const next = wireNav(body);
       next.addEventListener("click", () => { collect(body, cat.RISK_META, s.riskManagement); goto(4); });

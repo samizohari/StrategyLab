@@ -21,8 +21,9 @@ export const LOGIC_META = {
       { key: "overbought", label: "Overbought level", type: "number", min: 55, max: 95, step: 1, def: 70 },
       { key: "oversold", label: "Oversold level", type: "number", min: 5, max: 45, step: 1, def: 30 },
       { key: "mode", label: "Mode", type: "select", opts: [["reversion", "Mean reversion"], ["momentum", "Momentum"], ["bands", "Level bands (buy < oversold, sell > overbought)"]], def: "reversion" },
-      { key: "side", label: "Direction (level bands)", type: "select", opts: [["long", "Long — buy oversold, sell overbought"], ["short", "Short — sell overbought, buy back oversold"]], def: "long", help: "Level bands only. Long = buy below oversold and sell above overbought; Short = the mirror (short above overbought, cover below oversold)." },
-      { key: "longOnly", label: "Opposite band exits only", type: "bool", def: true, help: "Level bands only. On = the opposite band closes the position instead of flipping it. Off = the opposite band flips the trade (long becomes short, or short becomes long)." }
+      { key: "side", label: "Direction (level bands)", type: "select", opts: [["long", "Long — buy oversold, sell overbought"], ["short", "Short — sell overbought, buy back oversold"], ["both", "Both — buy oversold and short overbought"]], def: "long", help: "Level bands only. Long = buy below oversold and sell above overbought; Short = the mirror (short above overbought, cover below oversold); Both = trade each band in its own direction." },
+      { key: "longOnly", label: "Opposite band exits only", type: "bool", def: true, help: "Single-direction level bands only. On = the opposite band closes the position instead of flipping it. Off = the opposite band flips the trade (long becomes short, or short becomes long)." },
+      { key: "signalExit", label: "RSI band can close a trade", type: "bool", def: true, help: "Off = band signals only open trades; every exit then comes from the stop-loss / take-profit. Use this for bracket strategies such as buy < 30 with a 0.5% target." }
     ]
   },
   MACD: {
@@ -65,11 +66,17 @@ export const LOGIC_META = {
 };
 
 export const RISK_META = [
-  { key: "stopType", label: "Stop-loss type", type: "select", opts: [["pct", "Fixed %"], ["atr", "ATR-based"], ["none", "None"]], def: "pct", help: "pct = fixed % below entry; atr = N x ATR(14) below entry." },
+  { key: "pipSize", label: "Pip size (price units)", type: "number", min: 0.0001, max: 100, step: 0.01, def: 0.1, help: "Price value of one pip on this instrument. Gold (XAUUSD) = 0.1, so 100 pips = $10 and 500 pips = $50 per ounce." },
+  { key: "stopType", label: "Stop-loss type", type: "select", opts: [["pct", "Fixed %"], ["pips", "Fixed pips"], ["atr", "ATR-based"], ["none", "None"]], def: "pct", help: "pct = fixed % from entry; pips = stopPips x pip size; atr = N x ATR(14)." },
   { key: "stopLoss", label: "Stop-loss (%)", type: "number", min: 0.1, max: 50, step: 0.1, def: 2, help: "Applies when stop type is Fixed %." },
+  { key: "stopPips", label: "Stop-loss (pips)", type: "number", min: 1, max: 100000, step: 1, def: 100, help: "Applies when stop type is Fixed pips: distance = pips x pip size." },
   { key: "stopATR", label: "Stop-loss (ATR x)", type: "number", min: 0.5, max: 10, step: 0.1, def: 2, help: "Applies when stop type is ATR-based." },
-  { key: "tpType", label: "Take-profit type", type: "select", opts: [["pct", "Fixed %"], ["trail", "Trailing"], ["none", "None"]], def: "pct" },
+  { key: "tpType", label: "Take-profit type", type: "select", opts: [["pct", "Fixed %"], ["pips", "Fixed pips"], ["trail", "Trailing"], ["none", "None"]], def: "pct", help: "Applies to longs (and to shorts unless the short override below is set)." },
   { key: "takeProfit", label: "Take-profit (%)", type: "number", min: 0.1, max: 100, step: 0.1, def: 4 },
+  { key: "takeProfitPips", label: "Take-profit (pips)", type: "number", min: 1, max: 100000, step: 1, def: 500, help: "Applies when take-profit type is Fixed pips." },
+  { key: "shortTpType", label: "Short take-profit (override)", type: "select", opts: [["same", "Same as above"], ["pct", "Fixed %"], ["pips", "Fixed pips"], ["none", "None"]], def: "same", help: "Lets shorts use a different target than longs. \"Same as above\" keeps one target for both directions." },
+  { key: "shortTakeProfit", label: "Short take-profit (%)", type: "number", min: 0.1, max: 100, step: 0.1, def: 4, help: "Used when the short override is Fixed %." },
+  { key: "shortTakeProfitPips", label: "Short take-profit (pips)", type: "number", min: 1, max: 100000, step: 1, def: 500, help: "Used when the short override is Fixed pips." },
   { key: "trailActivate", label: "Trailing: activate after profit %", type: "number", min: 0.1, max: 50, step: 0.1, def: 2, help: "Trailing stop activates once unrealized profit reaches this %." },
   { key: "trailDist", label: "Trailing: distance %", type: "number", min: 0.1, max: 20, step: 0.1, def: 1.5, help: "Trailing stop distance once activated." },
   { key: "riskPerTrade", label: "Risk per trade (% equity)", type: "number", min: 0.1, max: 10, step: 0.1, def: 1.5, help: "Risk-based sizing: stop-out loses this % of equity." },

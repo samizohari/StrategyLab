@@ -5,6 +5,17 @@
 import { U } from "../core/utils.js";
 
 export class SimulationEngine {
+  /** Effective risk for one direction: shorts may override the take-profit block
+   *  (shortTpType: same | none | pct | pips). Everything else is shared. */
+  _riskFor(risk, dir) {
+    if (dir === 1 || !risk.shortTpType || risk.shortTpType === "same") return risk;
+    const out = Object.assign({}, risk);
+    out.tpType = risk.shortTpType;
+    if (risk.shortTpType === "pct") out.takeProfit = risk.shortTakeProfit;
+    if (risk.shortTpType === "pips") out.takeProfitPips = risk.shortTakeProfitPips;
+    return out;
+  }
+
   _closeTrade(cfg, st, i, price, reason, exitSrc) {
     const pos = st.pos, cm = cfg.cm;
     const fee = pos.qty * pos.entry * (cm.feePct || 0) / 100;
@@ -27,21 +38,23 @@ export class SimulationEngine {
   }
 
   _openPosition(cfg, st, i, dir, src) {
-    const rm = cfg.rm, cm = cfg.cm, ctx = cfg.ctx;
+    const risk = this._riskFor(cfg.rm, dir), cm = cfg.cm, ctx = cfg.ctx;
     const entry = ctx.closes[i];
     const base = cm.compounding ? Math.max(0, st.cash) : cm.initialCapital;
+    const pip = +risk.pipSize || 0;
     let stop = null;
-    if (rm.stopType === "pct") stop = entry * (1 - dir * rm.stopLoss / 100);
-    else if (rm.stopType === "atr") {
+    if (risk.stopType === "pct") stop = entry * (1 - dir * risk.stopLoss / 100);
+    else if (risk.stopType === "pips") stop = entry - dir * (+risk.stopPips || 0) * pip;
+    else if (risk.stopType === "atr") {
       const at = ctx.getATR(14)[i];
-      if (!isNaN(at)) stop = entry - dir * at * rm.stopATR;
+      if (!isNaN(at)) stop = entry - dir * at * risk.stopATR;
     }
     const stopDist = stop != null ? Math.abs(entry - stop) : 0;
     let qty = 0;
     switch (cm.positionSizing) {
       case "risk":
-        qty = (stopDist > 0 && rm.riskPerTrade > 0)
-          ? base * (rm.riskPerTrade / 100) / stopDist
+        qty = (stopDist > 0 && risk.riskPerTrade > 0)
+          ? base * (risk.riskPerTrade / 100) / stopDist
           : base * ((cm.positionSize || 10) / 100) / entry;
         break;
       case "percentage":
@@ -75,10 +88,11 @@ export class SimulationEngine {
     const fee = qty * entry * (cm.feePct || 0) / 100;
     st.cash -= fee;
     let tp = null;
-    if (rm.tpType === "pct") tp = entry * (1 + dir * rm.takeProfit / 100);
+    if (risk.tpType === "pct") tp = entry * (1 + dir * risk.takeProfit / 100);
+    else if (risk.tpType === "pips") tp = entry + dir * (+risk.takeProfitPips || 0) * pip;
     st.pos = {
-      dir, qty, entry, entryBar: i, entryDate: ctx.bars[i].d, stop, tp,
-      trailActivated: false, trailDistPct: rm.trailDist / 100, src, entryFee: fee
+      dir, qty, entry, entryBar: i, entryDate: ctx.bars[i].d, stop, tp, risk,
+      trailActivated: false, trailDistPct: risk.trailDist / 100, src, entryFee: fee
     };
     return true;
   }
@@ -103,15 +117,15 @@ export class SimulationEngine {
 
       /* intrabar exits */
       if (pos && i > pos.entryBar) {
-        const dir = pos.dir;
+        const dir = pos.dir, eff = pos.risk || rm;
         if (dir === 1) {
-          if (rm.tpType === "trail") {
+          if (eff.tpType === "trail") {
             if (pos.trailActivated) {
               const cand = bar.h * (1 - pos.trailDistPct);
               if (cand > pos.stop) pos.stop = cand;
               if (bar.l <= pos.stop) { this._closeTrade(cfg, st, i, pos.stop, "trailing stop"); pos = null; }
             } else {
-              const act = pos.entry * (1 + rm.trailActivate / 100);
+              const act = pos.entry * (1 + eff.trailActivate / 100);
               if (bar.h >= act) {
                 pos.trailActivated = true;
                 pos.stop = Math.max(pos.stop != null ? pos.stop : 0, bar.h * (1 - pos.trailDistPct));
@@ -124,13 +138,13 @@ export class SimulationEngine {
             else if (pos.tp != null && bar.h >= pos.tp) { this._closeTrade(cfg, st, i, pos.tp, "take-profit"); pos = null; }
           }
         } else {
-          if (rm.tpType === "trail") {
+          if (eff.tpType === "trail") {
             if (pos.trailActivated) {
               const cand2 = bar.l * (1 + pos.trailDistPct);
               if (pos.stop == null || cand2 < pos.stop) pos.stop = cand2;
               if (bar.h >= pos.stop) { this._closeTrade(cfg, st, i, pos.stop, "trailing stop"); pos = null; }
             } else {
-              const act2 = pos.entry * (1 - rm.trailActivate / 100);
+              const act2 = pos.entry * (1 - eff.trailActivate / 100);
               if (bar.l <= act2) {
                 pos.trailActivated = true;
                 pos.stop = pos.stop != null
@@ -159,7 +173,7 @@ export class SimulationEngine {
             const opened = this._openPosition(cfg, st, i, s.dir, s.src);
             if (!opened) st.skipped = (st.skipped || 0) + 1;
           }
-        } else if (s.dir === -st.pos.dir) {
+        } else if (s.dir === -st.pos.dir && !s.entryOnly) {
           this._closeTrade(cfg, st, i, ctx.closes[i], s.exitOnly ? "signal exit" : "signal reversal", s.src);
           st.lastExitBar = i;
         }

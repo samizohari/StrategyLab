@@ -50,14 +50,15 @@ Reply with ONLY a JSON object (no markdown fences, no commentary) shaped as:
 {
   "name": "Short descriptive name",
   "strategyLogic": { "type": "MA_CROSS" | "RSI" | "MACD" | "BOLL" | "S_R_BREAK" | "TRENDLINE", "params": { ... } },
-  "riskManagement": { "stopType": "pct" | "atr" | "none", "stopLoss": 2, "stopATR": 2, "tpType": "pct" | "trail" | "none", "takeProfit": 4, "trailActivate": 1.5, "trailDist": 1.2, "riskPerTrade": 1.0, "maxDailyLoss": 4, "maxConsecLosses": 3, "pauseBars": 5 },
+  "riskManagement": { "stopType": "pct" | "pips" | "atr" | "none", "stopLoss": 2, "stopPips": 100, "stopATR": 2, "pipSize": 0.1, "tpType": "pct" | "pips" | "trail" | "none", "takeProfit": 4, "takeProfitPips": 500, "shortTpType": "same" | "pct" | "pips" | "none", "shortTakeProfit": 4, "shortTakeProfitPips": 500, "trailActivate": 1.5, "trailDist": 1.2, "riskPerTrade": 1.0, "maxDailyLoss": 4, "maxConsecLosses": 3, "pauseBars": 5 },
   "capitalManagement": { "positionSizing": "risk" | "percentage" | "fixed" | "kelly", "positionSize": 10, "maxPositionPct": 50, "compounding": true, "maxDrawdown": 25, "feePct": 0 },
   "reasoning": "2-3 sentences: why this fits the regime, how you set the stop/target"
 }
 Parameter rules:
 - MA_CROSS params: fastMA, slowMA, fastType, slowType ("sma"|"ema"), signalType ("cross"|"above"); fastMA < slowMA.
-- RSI params: period, overbought, oversold, mode ("reversion"|"momentum"|"bands"), side ("long"|"short"), longOnly (true|false); oversold < overbought. "side"/"longOnly" only apply to mode "bands".
-  mode "bands" is the plain threshold rule. side "long": buy as soon as RSI falls below oversold, and with longOnly true the overbought reading CLOSES the long (it does not short). side "short" mirrors it: sell short above overbought and buy back below oversold (longOnly true covers instead of flipping). Use it when the user asks e.g. "buy below RSI 30 and sell above RSI 70", or the reverse "short above RSI 70 and cover below RSI 30".
+- RSI params: period, overbought, oversold, mode ("reversion"|"momentum"|"bands"), side ("long"|"short"|"both"), longOnly (true|false), signalExit (true|false); oversold < overbought. "side"/"longOnly"/"signalExit" only apply to mode "bands".
+  mode "bands" is the plain threshold rule. side "long": buy as soon as RSI falls below oversold, and with longOnly true the overbought reading CLOSES the long (it does not short). side "short" mirrors it. side "both": buy below oversold AND short above overbought. signalExit false means band signals only OPEN trades, so exits come solely from the stop-loss / take-profit — use it for bracket strategies ("buy < 30 with a 0.5% target and 100-pip stop, short > 70 with a 500-pip target").
+- Pips: pipSize is the price value of one pip (gold = 0.1). stopType "pips" uses stopPips x pipSize; tpType "pips" uses takeProfitPips x pipSize. shortTpType overrides the take-profit for shorts only (used when long and short have different targets).
 - MACD params: fast, slow, signal, mode ("cross"|"hist"|"above"); fast < slow.
 - BOLL params: period, mult, mode ("breakout"|"reversion").
 - S_R_BREAK params: lookback, mode ("breakout"|"bounce").

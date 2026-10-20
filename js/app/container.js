@@ -80,7 +80,7 @@ export function buildContainer(opts) {
       auth.seedDefaults();
       strategies.seedDefaults();
       strategies.ensureTrendlineSeed();
-      strategies.ensureRsiBandSeeds();
+      strategies.ensureRsiBracketSeed();
       market.ensureDemo();
       return container;
     },

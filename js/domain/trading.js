@@ -53,15 +53,24 @@ function evalBase(sl, ctx, i) {
       if (p.mode === "bands") {
         /* Plain level rule, long: BUY while RSI < oversold, SELL when RSI > overbought.
            Mirrored rule, short: SELL (short) while RSI > overbought, cover when RSI < oversold.
-           "Opposite band exits only" (default) closes the position instead of flipping it. */
+           "both" trades each band in its own direction.
+           "Subject band can close a trade" off = signals only open; stops/targets exit. */
         const noFlip = p.longOnly !== false;
+        const noExit = p.signalExit === false;
+        const entryF = noExit ? { entryOnly: true } : null;
+        const exitF = noExit ? { entryOnly: true } : (noFlip ? { exitOnly: true } : null);
+        if (p.side === "both") {
+          if (r < os) return sig(1, os - r, "RSI<" + os + " buy", entryF);
+          if (r > ob) return sig(-1, r - ob, "RSI>" + ob + " short", entryF);
+          return ZERO;
+        }
         if (p.side === "short") {
           if (r > ob) return sig(-1, r - ob, "RSI>" + ob + " short");
-          if (r < os) return sig(1, os - r, "RSI<" + os + " cover/exit", noFlip ? { exitOnly: true } : null);
+          if (r < os) return sig(1, os - r, "RSI<" + os + " cover/exit", exitF);
           return ZERO;
         }
         if (r < os) return sig(1, os - r, "RSI<" + os + " buy");
-        if (r > ob) return sig(-1, r - ob, "RSI>" + ob + (noFlip ? " sell/exit" : " sell"), noFlip ? { exitOnly: true } : null);
+        if (r > ob) return sig(-1, r - ob, "RSI>" + ob + (noExit ? " sell" : (noFlip ? " sell/exit" : " sell")), exitF);
         return ZERO;
       }
       if (p.mode === "reversion") {
