@@ -10,7 +10,7 @@ import { computeMetrics, periodsPerYear } from "../domain/metrics.js";
 import { U } from "../core/utils.js";
 import { createStrategy } from "../domain/entities.js";
 import { parseLLMJSON } from "../services/ai-provider.js";
-import { parseYahooChart, buildYahooUrl, parseYahooQuotes, YahooFinanceAdapter, FALLBACK_SYMBOLS, clampRange, rangesFor, maxRangeFor } from "../adapters/yahoo-adapter.js";
+import { parseYahooChart, buildYahooUrl, parseYahooQuotes, YahooFinanceAdapter, FALLBACK_SYMBOLS, clampRange, rangesFor, maxRangeFor, normRange, RANGES } from "../adapters/yahoo-adapter.js";
 import { SymbolRefreshService } from "../services/symbol-refresh.js";
 import { renderMarkdown } from "../ui/md.js";
 import { composeStrategyHelp } from "../domain/help.js";
@@ -435,20 +435,23 @@ export function runAll(container) {
   });
   run("Yahoo url builder", () => {
     const u = buildYahooUrl("GC=F", "2y", "1d");
-    if (u.indexOf("GC%3DF") < 0 || u.indexOf("range=2y") < 0) throw new Error(u);
-    if (buildYahooUrl("X", "bogus", "1d").indexOf("range=2y") < 0) throw new Error("bad range fallback");
+    if (u.indexOf("GC%3DF") < 0 || u.indexOf("range=730d") < 0) throw new Error(u);
+    if (buildYahooUrl("X", "bogus", "1d").indexOf("range=730d") < 0) throw new Error("bad range fallback");
   });
   run("Yahoo timeframe: url, range clamp and dropdown options", () => {
-    const u = buildYahooUrl("GC=F", "1mo", "15m");
-    if (u.indexOf("interval=15m") < 0 || u.indexOf("range=1mo") < 0) throw new Error(u);
+    const u = buildYahooUrl("GC=F", "30d", "15m");
+    if (u.indexOf("interval=15m") < 0 || u.indexOf("range=30d") < 0) throw new Error(u);
     if (buildYahooUrl("GC=F", "2y", "bogus").indexOf("interval=1d") < 0) throw new Error("bad interval fallback");
-    const cl = clampRange("5y", "15m");
-    if (!cl.clamped || cl.range !== "1mo") throw new Error("5y+15m should clamp to 1mo, got " + JSON.stringify(cl));
-    if (clampRange("6mo", "1d").clamped) throw new Error("daily 6mo must not clamp");
-    if (maxRangeFor("60m") !== "2y") throw new Error("60m max range=" + maxRangeFor("60m"));
+    if (buildYahooUrl("GC=F", "2y", "1d").indexOf("range=730d") < 0) throw new Error("legacy range not normalised");
+    const cl = clampRange("1825d", "15m");
+    if (!cl.clamped || cl.range !== "60d") throw new Error("5y+15m should clamp to 60d, got " + JSON.stringify(cl));
+    if (clampRange("180d", "1d").clamped) throw new Error("daily 6 months must not clamp");
+    if (maxRangeFor("60m") !== "730d") throw new Error("60m max range=" + maxRangeFor("60m"));
     const opts = rangesFor("1m").map(r => r.value);
-    if (opts.indexOf("1mo") >= 0 || opts.indexOf("5d") < 0) throw new Error("1m options: " + opts.join(","));
-    if (rangesFor("1d").length < 10) throw new Error("daily should allow every range");
+    if (opts.indexOf("30d") >= 0 || opts.indexOf("7d") < 0) throw new Error("1m options: " + opts.join(","));
+    if (rangesFor("1d").length !== RANGES.length) throw new Error("daily should offer every range");
+    if (RANGES[0].value !== "1d" || RANGES[RANGES.length - 1].value !== "max") throw new Error("range list must span 1 day .. all time");
+    if (normRange("5y") !== "1825d" || normRange("nonsense") !== "730d") throw new Error("normRange failed");
   });
   run("Yahoo parser: intraday keeps every bar, daily collapses the day", () => {
     const ts = [1792000000, 1792000900, 1792001800];

@@ -29,23 +29,44 @@ export const INTERVALS = [
   { value: "1wk", label: "Weekly", maxDays: 0 },
   { value: "1mo", label: "Monthly", maxDays: 0 }
 ];
+/* Day-based spans: Yahoo accepts any <n>d / <n>mo / <n>y range, so intraday
+   intervals can use their full allowance (15m -> 60d) instead of a coarse month. */
 export const RANGES = [
   { value: "1d", label: "1 day", days: 1 },
-  { value: "5d", label: "5 days", days: 5 },
-  { value: "1mo", label: "1 month", days: 30 },
-  { value: "3mo", label: "3 months", days: 90 },
-  { value: "6mo", label: "6 months", days: 180 },
-  { value: "1y", label: "1 year", days: 365 },
-  { value: "2y", label: "2 years", days: 730 },
-  { value: "5y", label: "5 years", days: 1825 },
-  { value: "10y", label: "10 years", days: 3650 },
+  { value: "3d", label: "3 days", days: 3 },
+  { value: "7d", label: "1 week", days: 7 },
+  { value: "14d", label: "2 weeks", days: 14 },
+  { value: "30d", label: "1 month", days: 30 },
+  { value: "60d", label: "2 months", days: 60 },
+  { value: "90d", label: "3 months", days: 90 },
+  { value: "180d", label: "6 months", days: 180 },
+  { value: "365d", label: "1 year", days: 365 },
+  { value: "730d", label: "2 years", days: 730 },
+  { value: "1095d", label: "3 years", days: 1095 },
+  { value: "1825d", label: "5 years", days: 1825 },
+  { value: "3650d", label: "10 years", days: 3650 },
+  { value: "5475d", label: "15 years", days: 5475 },
+  { value: "7300d", label: "20 years", days: 7300 },
   { value: "ytd", label: "Year to date", days: 366 },
-  { value: "max", label: "Maximum", days: 100000 }
+  { value: "max", label: "All time (max)", days: 100000 }
 ];
+/* Older builds stored month/year tokens ("2y"); keep them working. */
+const LEGACY_RANGES = {
+  "1d": "1d", "5d": "7d", "1mo": "30d", "3mo": "90d", "6mo": "180d",
+  "1y": "365d", "2y": "730d", "5y": "1825d", "10y": "3650d",
+  "ytd": "ytd", "max": "max"
+};
 const INTERVAL_MAP = {};
 INTERVALS.forEach(i => { INTERVAL_MAP[i.value] = i; });
 const RANGE_MAP = {};
 RANGES.forEach(r => { RANGE_MAP[r.value] = r; });
+
+/** Normalise a stored/typed range to a current value (falls back to 2 years). */
+export function normRange(range) {
+  if (RANGE_MAP[range]) return range;
+  if (LEGACY_RANGES[range]) return LEGACY_RANGES[range];
+  return "730d";
+}
 
 /** Normalise an interval value; unknown values fall back to daily. */
 export function normInterval(interval) { return INTERVAL_MAP[interval] ? interval : "1d"; }
@@ -60,7 +81,7 @@ export function rangesFor(interval) {
 /** Largest allowed range for the interval, e.g. 15m -> 1mo. */
 export function maxRangeFor(interval) {
   const list = rangesFor(interval);
-  if (!list.length) return "1mo";
+  if (!list.length) return "30d";
   const max = (INTERVAL_MAP[normInterval(interval)] || {}).maxDays || 0;
   if (!max) return "max";
   return list.reduce((best, r) => (r.days >= best.days ? r : best), list[0]).value;
@@ -69,7 +90,7 @@ export function maxRangeFor(interval) {
 /** Clamp a range to what the interval supports. Returns { range, clamped }. */
 export function clampRange(range, interval) {
   const iv = normInterval(interval);
-  const want = RANGE_MAP[range] ? range : "2y";
+  const want = normRange(range);
   const max = (INTERVAL_MAP[iv] || {}).maxDays || 0;
   if (!max) return { range: want, clamped: false };
   const r = RANGE_MAP[want];
@@ -80,7 +101,7 @@ export function clampRange(range, interval) {
 export function buildYahooUrl(symbol, range, interval) {
   const sym = encodeURIComponent(String(symbol || "GC=F").trim());
   const iv = normInterval(interval);
-  const rng = RANGE_MAP[range] ? range : "2y";
+  const rng = normRange(range);
   return "https://query1.finance.yahoo.com/v8/finance/chart/" + sym +
     "?range=" + rng + "&interval=" + iv +
     "&includePrePost=false&events=div%2Csplit";

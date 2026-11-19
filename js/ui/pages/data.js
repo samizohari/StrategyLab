@@ -2,7 +2,7 @@
 "use strict";
 import { startPage } from "../../app/page.js";
 import { U } from "../../core/utils.js";
-import { INTERVALS, RANGES, normInterval, rangesFor, maxRangeFor } from "../../adapters/yahoo-adapter.js";
+import { INTERVALS, normInterval, normRange, rangesFor, maxRangeFor } from "../../adapters/yahoo-adapter.js";
 
 startPage("data", {
   mount(container, view, { kit, charts, shared, user }) {
@@ -14,7 +14,7 @@ startPage("data", {
       (st ? '<button class="btn" id="data-export">Export CSV</button>' : "") +
       (st ? '<button class="btn btn-danger" id="data-clear">Clear data</button>' : "") + "</div></div>";
     const yhSym = container.settings.get("symbol") || "GC=F";
-    const yhRange = container.settings.get("yahoo_range") || "2y";
+    const yhRange = normRange(container.settings.get("yahoo_range") || "730d");
     const yhInt = normInterval(container.settings.get("yahoo_interval") || "1d");
     const yhLast = container.settings.get("yahoo_last_at");
     html += '<div class="card" style="margin-bottom:14px"><h3>Yahoo Finance <span class="sub">live OHLCV import · pick symbol, timeframe and history</span></h3>' +
@@ -241,7 +241,7 @@ startPage("data", {
     function fillRanges(preferred) {
       const iv = normInterval(intSel.value);
       const list = rangesFor(iv);
-      const want = preferred || rangeSel.value || container.settings.get("yahoo_range") || "2y";
+      const want = normRange(preferred || rangeSel.value || container.settings.get("yahoo_range") || "730d");
       const ok = list.some(r => r.value === want) ? want : maxRangeFor(iv);
       rangeSel.innerHTML = list.map(r => '<option value="' + r.value + '"' + (r.value === ok ? " selected" : "") + ">" + r.label + "</option>").join("");
       const cap = (INTERVALS.filter(x => x.value === iv)[0] || {}).maxDays || 0;
