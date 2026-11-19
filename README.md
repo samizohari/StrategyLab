@@ -105,7 +105,7 @@ The previous single-file build relied on a global `GPB` namespace; the modular b
 
 ## Features
 
-- **Data** — CSV/JSON import (flexible headers, dedupe, validation), manual bars, seeded demo generator, CSV export, date slicing, **Yahoo Finance live import** (any symbol, 1y–max daily history) with a Refresh button — direct calls are CORS-blocked, so the app auto-falls back to public CORS proxies (allorigins → corsproxy.io).
+- **Data** — CSV/JSON import (flexible headers, dedupe, validation), manual bars, seeded demo generator, CSV export, date slicing, **Yahoo Finance live import** at a chosen **timeframe** (1m / 5m / 15m / 30m / 1h / daily / weekly / monthly) over any history the interval allows, with a **preview-before-save grid** and a paged **dataset grid** (bar count, span, bar spacing, OHLC quality flags, per-row change %, page size and navigation) — direct calls are CORS-blocked, so the app auto-falls back to public CORS proxies (allorigins → corsproxy.io).
 - **Strategies** — 7-step wizard (type → logic → combination → risk → capital → help → review): MA cross (SMA/EMA), RSI, MACD, Bollinger, S/R breakout, **Trendline** (buy above the rising bullish low-regression line, sell below the falling bearish high-regression line), RSI **level bands** in both directions (long: buy below the oversold level, sell above the overbought level; short: the mirror; or "both" to trade each band in its own direction), with optional pips-based stops/targets and a separate short take-profit; param tooltips and Markdown help docs throughout.
 - **AI Advisor** — offline deterministic recommendations from live market state, plus optional LLM generation (OpenAI-compatible endpoint); ships with AI-created presets such as *Trendline Follower (AI)* and *RSI 30/70 Bracketed (AI)* — buy RSI(14) < 30 with a +0.5% target and a 100-pip stop, short RSI(14) > 70 with a 500-pip target and a 100-pip stop, band signals opening trades only.
 - **Combination engine** — AND consensus, OR, WEIGHTED vote (+threshold), SEQUENTIAL trigger/confirm.
@@ -115,7 +115,7 @@ The previous single-file build relied on a global `GPB` namespace; the modular b
 - **Analysis** — comparison matrix + ranking + radar + equity overlay, **regime heatmap**, scenario analysis on auto-detected bull/bear/sideways segments, parameter optimizer (grid search), risk dashboard.
 - **Automation** — price/MA/RSI alerts with browser notifications, scheduled recurring backtests (tab-open), printable PDF reports, CSV/JSON exports.
 - **Security** — salted SHA-256 (pure JS), session tokens + inactivity timeout, RBAC (ADMIN/ANALYST/VIEWER), login rate limiting (5/min), XSS-escaped rendering, full audit log with rotation + archives, JSON backup/restore.
-- **Quality** — self-test suite (57 assertions, headless-capable) + performance benchmark in Admin → Tests & Benchmark.
+- **Quality** — self-test suite (61 assertions, headless-capable) + performance benchmark in Admin → Tests & Benchmark.
 
 ---
 

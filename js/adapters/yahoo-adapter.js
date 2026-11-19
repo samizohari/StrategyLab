@@ -17,16 +17,79 @@ const ENCODERS = {
 const ORDER = ["direct", "aoRaw", "aoGet", "aoRaw2", "aoGet2", "corsproxy"];
 const WRAPPED = { aoGet: true, aoGet2: true };
 
+/* Timeframes the UI offers. maxDays is Yahoo's lookback limit for that interval
+   (0 = no limit); requesting more returns an error or silently truncates. */
+export const INTERVALS = [
+  { value: "1m", label: "1 minute", maxDays: 7 },
+  { value: "5m", label: "5 minutes", maxDays: 60 },
+  { value: "15m", label: "15 minutes", maxDays: 60 },
+  { value: "30m", label: "30 minutes", maxDays: 60 },
+  { value: "60m", label: "1 hour", maxDays: 730 },
+  { value: "1d", label: "Daily", maxDays: 0 },
+  { value: "1wk", label: "Weekly", maxDays: 0 },
+  { value: "1mo", label: "Monthly", maxDays: 0 }
+];
+export const RANGES = [
+  { value: "1d", label: "1 day", days: 1 },
+  { value: "5d", label: "5 days", days: 5 },
+  { value: "1mo", label: "1 month", days: 30 },
+  { value: "3mo", label: "3 months", days: 90 },
+  { value: "6mo", label: "6 months", days: 180 },
+  { value: "1y", label: "1 year", days: 365 },
+  { value: "2y", label: "2 years", days: 730 },
+  { value: "5y", label: "5 years", days: 1825 },
+  { value: "10y", label: "10 years", days: 3650 },
+  { value: "ytd", label: "Year to date", days: 366 },
+  { value: "max", label: "Maximum", days: 100000 }
+];
+const INTERVAL_MAP = {};
+INTERVALS.forEach(i => { INTERVAL_MAP[i.value] = i; });
+const RANGE_MAP = {};
+RANGES.forEach(r => { RANGE_MAP[r.value] = r; });
+
+/** Normalise an interval value; unknown values fall back to daily. */
+export function normInterval(interval) { return INTERVAL_MAP[interval] ? interval : "1d"; }
+export function isIntraday(interval) { return /m$|h$/.test(normInterval(interval)); }
+
+/** Ranges Yahoo will serve for this interval (UI uses it to filter the dropdown). */
+export function rangesFor(interval) {
+  const max = (INTERVAL_MAP[normInterval(interval)] || {}).maxDays || 0;
+  return RANGES.filter(r => !max || r.days <= max);
+}
+
+/** Largest allowed range for the interval, e.g. 15m -> 1mo. */
+export function maxRangeFor(interval) {
+  const list = rangesFor(interval);
+  if (!list.length) return "1mo";
+  const max = (INTERVAL_MAP[normInterval(interval)] || {}).maxDays || 0;
+  if (!max) return "max";
+  return list.reduce((best, r) => (r.days >= best.days ? r : best), list[0]).value;
+}
+
+/** Clamp a range to what the interval supports. Returns { range, clamped }. */
+export function clampRange(range, interval) {
+  const iv = normInterval(interval);
+  const want = RANGE_MAP[range] ? range : "2y";
+  const max = (INTERVAL_MAP[iv] || {}).maxDays || 0;
+  if (!max) return { range: want, clamped: false };
+  const r = RANGE_MAP[want];
+  if (r.days <= max) return { range: want, clamped: false };
+  return { range: maxRangeFor(iv), clamped: true };
+}
+
 export function buildYahooUrl(symbol, range, interval) {
   const sym = encodeURIComponent(String(symbol || "GC=F").trim());
-  const rng = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"].indexOf(range) >= 0 ? range : "2y";
+  const iv = normInterval(interval);
+  const rng = RANGE_MAP[range] ? range : "2y";
   return "https://query1.finance.yahoo.com/v8/finance/chart/" + sym +
-    "?range=" + rng + "&interval=" + (interval || "1d") +
+    "?range=" + rng + "&interval=" + iv +
     "&includePrePost=false&events=div%2Csplit";
 }
 
-/** Pure parser: yahoo v8 chart JSON -> sorted OHLCV bars. Exported for tests. */
-export function parseYahooChart(data) {
+/** Pure parser: yahoo v8 chart JSON -> sorted OHLCV bars. Exported for tests.
+ *  Intraday intervals keep the clock in `d` ("YYYY-MM-DD HH:mm") so bars on the
+ *  same day are not collapsed; daily and coarser keep plain "YYYY-MM-DD". */
+export function parseYahooChart(data, interval) {
   if (!data || data.chart && data.chart.error) {
     const msg = data && data.chart && data.chart.error && data.chart.error.description || "Yahoo returned an error.";
     return { ok: false, msg };
@@ -37,13 +100,15 @@ export function parseYahooChart(data) {
   }
   const ts = res.timestamp;
   const q = res.indicators.quote[0];
+  const intra = isIntraday(interval);
   const bars = [];
   const seen = {};
   for (let i = 0; i < ts.length; i++) {
     const o = q.open && q.open[i], h = q.high && q.high[i], l = q.low && q.low[i],
       c = q.close && q.close[i], v = q.volume && q.volume[i];
     if (o == null || h == null || l == null || c == null) continue;
-    const d = new Date(ts[i] * 1000).toISOString().slice(0, 10);
+    const iso = new Date(ts[i] * 1000).toISOString();
+    const d = intra ? iso.slice(0, 16).replace("T", " ") : iso.slice(0, 10);
     if (seen[d]) continue;
     seen[d] = 1;
     bars.push({
@@ -158,9 +223,19 @@ export class YahooFinanceAdapter {
     return { ok: false, msg: tried.join(" | "), lastError: lastErr && lastErr.message };
   }
 
-  /** fetchChart(symbol, range) — OHLCV import. */
-  fetchChart(symbol, range) {
-    return this._request(buildYahooUrl(symbol, range, "1d"), parseYahooChart);
+  /** fetchChart(symbol, range, interval) — OHLCV import at the chosen timeframe.
+   *  The range is clamped to what Yahoo serves for that interval (e.g. 15m -> 1mo). */
+  async fetchChart(symbol, range, interval) {
+    const iv = normInterval(interval);
+    const cl = clampRange(range, iv);
+    const res = await this._request(buildYahooUrl(symbol, cl.range, iv), d => parseYahooChart(d, iv));
+    if (res.ok) {
+      res.interval = iv;
+      res.range = cl.range;
+      res.requestedRange = range;
+      res.clamped = cl.clamped;
+    }
+    return res;
   }
 
   /** fetchSymbols(query) — symbol list from Yahoo; falls back to the curated list. */

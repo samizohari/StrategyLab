@@ -2,7 +2,7 @@
    Orchestrates SimulationEngine + evaluator + metrics; result persistence stays in ResultService. */
 "use strict";
 import { U } from "../core/utils.js";
-import { computeMetrics, ddSeries } from "../domain/metrics.js";
+import { computeMetrics, ddSeries, periodsPerYear } from "../domain/metrics.js";
 import { SimulationEngine } from "./engine-core.js";
 
 const CHUNK = 2500;
@@ -22,7 +22,7 @@ export class BacktestService {
 
   _buildResult(strategy, cfg, st, sIdx, eIdx, opts) {
     const curve = st.curve;
-    const metrics = computeMetrics(curve, st.trades, cfg.cm.initialCapital);
+    const metrics = computeMetrics(curve, st.trades, cfg.cm.initialCapital, cfg.periodsPerYear);
     return {
       id: opts.resultId || this.ids.next(),
       symbol: this._symbol(),
@@ -62,7 +62,11 @@ export class BacktestService {
     const evaluator = this.strategies.evaluator();
     const ctx = evaluator.makeContext(bars);
     const warmup = evaluator.maxWarmupFor(strategy);
-    const cfg = { strategy, ctx, rm: strategy.riskManagement, cm, warmup, evaluate: (s, c, i, cs) => evaluator.evaluate(s, c, i, cs) };
+    const cfg = {
+      strategy, ctx, rm: strategy.riskManagement, cm, warmup,
+      periodsPerYear: periodsPerYear(bars.slice(sIdx, eIdx + 1).map(b => b.d)),
+      evaluate: (s, c, i, cs) => evaluator.evaluate(s, c, i, cs)
+    };
     const st = {};
     const total = eIdx - sIdx + 1;
     let done = 0;

@@ -6,11 +6,11 @@ import { sha256Hex, pwPolicy } from "../core/sha256.js";
 import { sma, ema, rsi, macd, bollinger, atr, linregLine } from "../domain/indicators.js";
 import { parseCSV } from "../domain/series.js";
 import { regimes } from "../domain/regime.js";
-import { computeMetrics } from "../domain/metrics.js";
+import { computeMetrics, periodsPerYear } from "../domain/metrics.js";
 import { U } from "../core/utils.js";
 import { createStrategy } from "../domain/entities.js";
 import { parseLLMJSON } from "../services/ai-provider.js";
-import { parseYahooChart, buildYahooUrl, parseYahooQuotes, YahooFinanceAdapter, FALLBACK_SYMBOLS } from "../adapters/yahoo-adapter.js";
+import { parseYahooChart, buildYahooUrl, parseYahooQuotes, YahooFinanceAdapter, FALLBACK_SYMBOLS, clampRange, rangesFor, maxRangeFor } from "../adapters/yahoo-adapter.js";
 import { SymbolRefreshService } from "../services/symbol-refresh.js";
 import { renderMarkdown } from "../ui/md.js";
 import { composeStrategyHelp } from "../domain/help.js";
@@ -437,6 +437,48 @@ export function runAll(container) {
     const u = buildYahooUrl("GC=F", "2y", "1d");
     if (u.indexOf("GC%3DF") < 0 || u.indexOf("range=2y") < 0) throw new Error(u);
     if (buildYahooUrl("X", "bogus", "1d").indexOf("range=2y") < 0) throw new Error("bad range fallback");
+  });
+  run("Yahoo timeframe: url, range clamp and dropdown options", () => {
+    const u = buildYahooUrl("GC=F", "1mo", "15m");
+    if (u.indexOf("interval=15m") < 0 || u.indexOf("range=1mo") < 0) throw new Error(u);
+    if (buildYahooUrl("GC=F", "2y", "bogus").indexOf("interval=1d") < 0) throw new Error("bad interval fallback");
+    const cl = clampRange("5y", "15m");
+    if (!cl.clamped || cl.range !== "1mo") throw new Error("5y+15m should clamp to 1mo, got " + JSON.stringify(cl));
+    if (clampRange("6mo", "1d").clamped) throw new Error("daily 6mo must not clamp");
+    if (maxRangeFor("60m") !== "2y") throw new Error("60m max range=" + maxRangeFor("60m"));
+    const opts = rangesFor("1m").map(r => r.value);
+    if (opts.indexOf("1mo") >= 0 || opts.indexOf("5d") < 0) throw new Error("1m options: " + opts.join(","));
+    if (rangesFor("1d").length < 10) throw new Error("daily should allow every range");
+  });
+  run("Yahoo parser: intraday keeps every bar, daily collapses the day", () => {
+    const ts = [1792000000, 1792000900, 1792001800];
+    const q = { open: [10, 11, 12], high: [11, 12, 13], low: [9, 10, 11], close: [10.5, 11.5, 12.5], volume: [1, 2, 3] };
+    const fixture = { chart: { result: [{ meta: {}, timestamp: ts, indicators: { quote: [q] } }] } };
+    const m15 = parseYahooChart(fixture, "15m");
+    if (!m15.ok || m15.bars.length !== 3) throw new Error("intraday bars=" + (m15.bars && m15.bars.length));
+    if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(m15.bars[0].d)) throw new Error("intraday label=" + m15.bars[0].d);
+    if (!(m15.bars[0].d < m15.bars[2].d)) throw new Error("bars not time-sorted");
+    const d1 = parseYahooChart(fixture, "1d");
+    if (!d1.ok || d1.bars.length !== 1) throw new Error("daily should collapse to 1 bar, got " + (d1.bars && d1.bars.length));
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d1.bars[0].d)) throw new Error("daily label=" + d1.bars[0].d);
+  });
+  run("Metrics: bars-per-year follows the timeframe", () => {
+    if (periodsPerYear(["2026-01-02", "2026-01-05", "2026-01-06"]) !== 252) throw new Error("daily should be 252");
+    const intra = periodsPerYear(["2026-10-16 14:00", "2026-10-16 14:15", "2026-10-16 14:30"]);
+    if (intra !== 6552) throw new Error("15m bars/year=" + intra);
+    if (periodsPerYear(["2026-01-31", "2026-03-31", "2026-05-31"]) !== 12) throw new Error("monthly should be 12");
+  });
+  run("Import: timeframe is stored with the dataset", () => {
+    const bars = [
+      { d: "2026-10-16 14:00", o: 10, h: 11, l: 9, c: 10.5, v: 100 },
+      { d: "2026-10-16 14:15", o: 10.5, h: 11.5, l: 10, c: 11.2, v: 120 }
+    ];
+    const sym = container.market.importSymbol("GC=F", bars, { name: "t", source: "test", interval: "15m", symbol: "GC=F" });
+    container.settings.set("symbol", sym);
+    if (container.market.meta().interval !== "15m") throw new Error("interval not stored");
+    if (container.market.count() !== 2) throw new Error("bars=" + container.market.count());
+    const b = container.market.rangeBounds();
+    if (!b || b.start !== "2026-10-16 14:00") throw new Error("range start=" + (b && b.start));
   });
   run("Markdown: structure & escaping", () => {
     const h = renderMarkdown("# Title\n\n- a\n- **b**\n\n| K | V |\n|---|---|\n| x | `1` |\n\n<script>alert(1)</scr" + "ipt>");

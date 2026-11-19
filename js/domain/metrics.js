@@ -1,10 +1,32 @@
 /* domain/metrics.js — performance metrics + drawdown series (pure) */
 "use strict";
 
-/** computeMetrics(curve, trades, initialCapital)
+/** Bars per year implied by the bar labels: 252 daily, 52 weekly, 12 monthly,
+ *  and 252 sessions x 390 minutes / bar size for intraday data. */
+export function periodsPerYear(dates) {
+  if (!dates || dates.length < 3) return 252;
+  const ms = [];
+  for (let i = 1; i < Math.min(dates.length, 60); i++) {
+    const a = Date.parse(String(dates[i - 1]).replace(" ", "T"));
+    const b = Date.parse(String(dates[i]).replace(" ", "T"));
+    if (!isNaN(a) && !isNaN(b) && b > a) ms.push(b - a);
+  }
+  if (!ms.length) return 252;
+  ms.sort((a, b) => a - b);
+  const gapMin = ms[Math.floor(ms.length / 2)] / 60000;
+  if (!gapMin) return 252;
+  if (gapMin < 24 * 60) return Math.max(1, Math.round(252 * 390 / gapMin));
+  const days = gapMin / (24 * 60);
+  if (days <= 3.5) return 252;
+  if (days <= 10) return 52;
+  return 12;
+}
+
+/** computeMetrics(curve, trades, initialCapital, barPerYear)
  *  curve: [[date, equity], ...]  trades: [{pnl, holdBars, entry, qty}, ...]
+ *  barPerYear defaults to 252 (daily bars) and only affects Sharpe annualisation.
  *  Returns metric object with nulls for undefined values. */
-export function computeMetrics(curve, trades, initialCapital) {
+export function computeMetrics(curve, trades, initialCapital, periodsPerYr) {
   const m = {
     winRate: null, totalReturn: null, sharpe: null, maxDrawdown: null, avgWinLoss: null,
     profitFactor: null, totalTrades: 0, winningTrades: 0, losingTrades: 0, totalFees: 0,
@@ -22,7 +44,7 @@ export function computeMetrics(curve, trades, initialCapital) {
     let varr = 0;
     for (const r of rs) varr += (r - mean) * (r - mean);
     const sd = Math.sqrt(varr / (rs.length - 1));
-    m.sharpe = sd > 0 ? mean / sd * Math.sqrt(252) : 0;
+    m.sharpe = sd > 0 ? mean / sd * Math.sqrt(periodsPerYr > 0 ? periodsPerYr : 252) : 0;
   }
 
   let peak = -Infinity, maxDD = 0;
