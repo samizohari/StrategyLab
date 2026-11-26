@@ -688,6 +688,18 @@ export function runAll(container) {
     const keyed = mk({ yahoo_proxy_key: "abc" })._attemptUrls("https://example.test/x").map(a => a.note);
     if (!keyed.some(n => /corsproxy/.test(n))) throw new Error("keyed corsproxy missing: " + keyed.join(", "));
   });
+  run("Yahoo: one download is capped by the total time budget", async () => {
+    const slow = new YahooFinanceAdapter({
+      settings: { get: () => null }, timeoutMs: 200, totalBudgetMs: 900,
+      fetchFn: () => new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 500))
+    });
+    const t0 = Date.now();
+    const r = await slow.fetchChart("GC=F", "5y", "1d");
+    const ms = Date.now() - t0;
+    if (r.ok) throw new Error("expected failure");
+    if (ms > 4000) throw new Error("budget not enforced: " + ms + "ms");
+    if (!r.detail) throw new Error("no route detail");
+  });
   run("Download failure gives actionable advice", async () => {
     const a = new YahooFinanceAdapter({ settings: { get: () => null }, timeoutMs: 1000, fetchFn: async () => ({ ok: false, status: 401, json: async () => ({}) }) });
     const r = await a.fetchChart("GC=F", "1mo");

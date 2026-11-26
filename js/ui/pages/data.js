@@ -234,9 +234,16 @@ startPage("data", {
     const limHint = document.getElementById("yh-lim");
     const previewCard = document.getElementById("yh-preview-card");
 
-    function yhMessage(txt, ok) {
+    function yhMessage(txt, ok, configLink) {
       yhStatus.classList.toggle("ok", !!ok);
       yhStatus.textContent = txt;
+      if (configLink && !ok) {
+        const a = document.createElement("a");
+        a.href = "settings.html";
+        a.textContent = " Configure data source →";
+        a.style.marginLeft = "6px";
+        yhStatus.appendChild(a);
+      }
     }
     function fillRanges(preferred) {
       const iv = normInterval(intSel.value);
@@ -262,7 +269,8 @@ startPage("data", {
         const res = await container.marketData.fetchChart(symbol, range, interval);
         kit.busy(false);
         if (!res.ok) {
-          yhMessage(res.msg || "Import failed.", false);
+          const d = res.detail ? " Routes tried: " + res.detail : "";
+          yhMessage((res.msg || "Import failed.") + (d.length > 240 ? d.slice(0, 240) + "…" : d), false, true);
           container.log.add("ERROR", container.actorId(), "DATA_IMPORT", "Download failed for " + symbol + " " + interval + " (" + range + "): " + (res.detail || res.msg));
           return null;
         }

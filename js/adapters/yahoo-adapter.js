@@ -202,6 +202,9 @@ export class YahooFinanceAdapter {
     this.log = deps.log || null;
     this.fetchFn = deps.fetchFn || ((...a) => fetch(...a));
     this.timeoutMs = deps.timeoutMs || 25000;
+    /* Hard ceiling for one download: free proxies can each hang for 25s, and a
+       stall that long is worse than a fast, actionable failure. */
+    this.totalBudgetMs = deps.totalBudgetMs || 45000;
   }
   _attemptUrls(url) {
     const forced = this.settings.get("yahoo_proxy");
@@ -209,11 +212,12 @@ export class YahooFinanceAdapter {
     const list = [];
     if (forced) {
       const raw = String(forced);
-      list.push({ url: raw.replace("{url}", encodeURIComponent(url)), wrap: /allorigins\/get/.test(raw), note: "custom relay" });
+      list.push({ url: raw.replace("{url}", encodeURIComponent(url)), wrap: /allorigins\/get/.test(raw), note: "custom relay", timeout: this.timeoutMs });
     } else {
-      list.push({ url: ENCODERS.direct(url), wrap: false, note: LABELS.direct });
+      /* direct is hopeless in a browser — fail it fast instead of burning 25s */
+      list.push({ url: ENCODERS.direct(url), wrap: false, note: LABELS.direct, timeout: Math.min(8000, this.timeoutMs) });
     }
-    PUBLIC_ROUTES.forEach(k => list.push({ url: ENCODERS[k](url), wrap: !!WRAPPED[k], note: LABELS[k] }));
+    PUBLIC_ROUTES.forEach(k => list.push({ url: ENCODERS[k](url), wrap: !!WRAPPED[k], note: LABELS[k], timeout: this.timeoutMs }));
     if (key) list.push({ url: ENCODERS.corsproxy(url, key), wrap: false, note: LABELS.corsproxy });
     return list;
   }
@@ -230,7 +234,8 @@ export class YahooFinanceAdapter {
   }
   async _fetchJSON(entry) {
     const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
-    const timer = ctrl ? setTimeout(() => ctrl.abort(), this.timeoutMs) : null;
+    const budget = entry.timeout || this.timeoutMs;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), budget) : null;
     try {
       const r = await this.fetchFn(entry.url, Object.assign(
         { method: "GET", headers: { Accept: "application/json" } },
@@ -251,17 +256,39 @@ export class YahooFinanceAdapter {
     const attempts = this._attemptUrls(url);
     const tried = [];
     let lastErr = null;
-    for (const entry of attempts) {
-      try {
-        const { data } = await this._fetchJSON(entry);
-        const parsed = parser(data);
-        if (parsed.ok) return parsed;
-        lastErr = new Error(parsed.msg || "parse error");
-      } catch (e) {
-        lastErr = e;
-        tried.push((entry.note || "proxy") + ":" + (e.message || e));
+    const started = Date.now();
+    const left = () => this.totalBudgetMs - (Date.now() - started);
+    /* Free proxies fail transiently (5xx, cold start, rate limit). One pass that
+       gives up on the first blip is why downloads looked permanently broken, so
+       retry the proxy routes once after a short pause. */
+    const pass = async list => {
+      for (const entry of list) {
+        const rem = left();
+        if (rem < 1500) { tried.push((entry.note || "proxy") + ":skipped (time budget)"); break; }
+        try {
+          const { data } = await this._fetchJSON({ url: entry.url, wrap: entry.wrap, timeout: Math.min(entry.timeout || this.timeoutMs, rem) });
+          const parsed = parser(data);
+          if (parsed.ok) return parsed;
+          lastErr = new Error(parsed.msg || "parse error");
+          tried.push((entry.note || "proxy") + ":" + lastErr.message);
+        } catch (e) {
+          lastErr = e;
+          tried.push((entry.note || "proxy") + ":" + (e.message || e));
+        }
       }
-    }
+      return null;
+    };
+    const first = await pass(attempts);
+    if (first) return first;
+    if (left() < 6000) return this._fail(tried, lastErr);
+    await new Promise(r => setTimeout(r, 600));
+    const retry = attempts.filter(a => a.note !== LABELS.direct);
+    const second = await pass(retry);
+    if (second) return second;
+    return this._fail(tried, lastErr);
+  }
+
+  _fail(tried, lastErr) {
     const detail = tried.join(" | ");
     return {
       ok: false, msg: this._advice(detail), detail, attempts: tried,

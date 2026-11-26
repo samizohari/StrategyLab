@@ -138,7 +138,7 @@ instead of printing a raw pipe-separated error.
 - **Analysis** — comparison matrix + ranking + radar + equity overlay, **regime heatmap**, scenario analysis on auto-detected bull/bear/sideways segments, parameter optimizer (grid search), risk dashboard.
 - **Automation** — price/MA/RSI alerts with browser notifications, scheduled recurring backtests (tab-open), printable PDF reports, CSV/JSON exports.
 - **Security** — salted SHA-256 (pure JS), session tokens + inactivity timeout, RBAC (ADMIN/ANALYST/VIEWER), login rate limiting (5/min), XSS-escaped rendering, full audit log with rotation + archives, JSON backup/restore.
-- **Quality** — self-test suite (67 assertions, headless-capable) + performance benchmark in Admin → Tests & Benchmark.
+- **Quality** — self-test suite (68 assertions, headless-capable) + performance benchmark in Admin → Tests & Benchmark.
 
 ---
 
