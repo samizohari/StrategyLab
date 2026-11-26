@@ -22,6 +22,8 @@ import { ScheduleService } from "../services/schedule-service.js";
 import { AdvisorService } from "../services/advisor-service.js";
 import { OpenAiCompatibleProvider } from "../services/ai-provider.js";
 import { YahooFinanceAdapter } from "../adapters/yahoo-adapter.js";
+import { TwelveDataAdapter } from "../adapters/twelvedata-adapter.js";
+import { MarketDataAdapter } from "../adapters/market-data-adapter.js";
 import { SymbolRefreshService } from "../services/symbol-refresh.js";
 
 /** buildContainer({main?, session?}) -> container
@@ -64,12 +66,14 @@ export function buildContainer(opts) {
   const ai = new OpenAiCompatibleProvider({ settings, log });
   const yahoo = new YahooFinanceAdapter({ settings, log, fetchFn: opts.fetch });
   const symbolRefresh = new SymbolRefreshService({ yahoo, settings, log });
+  const twelve = new TwelveDataAdapter({ settings, fetchFn: opts.fetch });
+  const marketData = new MarketDataAdapter({ settings, yahoo, twelve });
 
   const container = {
     stores: { main: mainStore, session: sessionStore },
     repos, settings, log, ids, clock, ip, market,
     auth, market, strategies, backtest, results, analysis, optimizer, alerts, schedules,
-    advisor, ai, yahoo, symbolRefresh,
+    advisor, ai, yahoo, symbolRefresh, twelve, marketData,
 
     /** Notification port — UI adapters register themselves (inversion of control). */
     bindNotify(port) { alerts.notifyPort = port; },

@@ -103,9 +103,32 @@ The previous single-file build relied on a global `GPB` namespace; the modular b
 
 ---
 
+## Market data
+
+Browsers cannot call `query1.finance.yahoo.com` directly — Yahoo sends no CORS header — and the
+free public CORS proxies that used to make this work are now dead, rate-limited, or key-only
+(`corsproxy.io` returns `401`). The app therefore ships two supported paths:
+
+1. **Twelve Data (recommended, no proxy).** Get a free key at [twelvedata.com](https://twelvedata.com/pricing)
+   (800 requests/day, 8/minute), paste it into **Settings → Market data source → Twelve Data API key**,
+   set the provider to *Twelve Data*. CORS is open, so the request goes straight from the browser.
+   Yahoo symbols are mapped automatically (`GC=F → XAU/USD`, `EURUSD=X → EUR/USD`, `BTC-USD → BTC/USD`, …).
+2. **Your own relay (keeps Yahoo, no third party).** Deploy [`relay/cloudflare-worker.js`](relay/cloudflare-worker.js)
+   as a Cloudflare Worker (free, ~2 minutes, no CLI), then paste its URL into **Yahoo relay URL** with the
+   `{url}` placeholder kept: `https://<worker>.workers.dev/?url={url}`.
+
+**Settings → Market data source → Test download** runs a real one-month request for the active symbol and
+reports which provider answered (or the exact route failures). If Yahoo fails while a Twelve Data key is
+saved, the app automatically falls back to Twelve Data, and vice-versa.
+
+Every failed download writes the route-by-route detail to the audit log, and the banner explains the fix
+instead of printing a raw pipe-separated error.
+
+---
+
 ## Features
 
-- **Data** — CSV/JSON import (flexible headers, dedupe, validation), manual bars, seeded demo generator, CSV export, date slicing, **Yahoo Finance live import** at a chosen **timeframe** (1m / 5m / 15m / 30m / 1h / daily / weekly / monthly) over any history from **1 day to 20 years or all time** (17 spans, filtered to what the interval allows), with a **preview-before-save grid** and a paged **dataset grid** (bar count, span, bar spacing, OHLC quality flags, per-row change %, page size and navigation) — direct calls are CORS-blocked, so the app auto-falls back to public CORS proxies (allorigins → corsproxy.io).
+- **Data** — CSV/JSON import (flexible headers, dedupe, validation), manual bars, seeded demo generator, CSV export, date slicing, live OHLCV import at a chosen **timeframe** (1m / 5m / 15m / 30m / 1h / daily / weekly / monthly) over any history from **1 day to 20 years or all time** (17 spans, filtered to what the interval allows), with a **preview-before-save grid** and a paged **dataset grid** (bar count, span, bar spacing, OHLC quality flags, per-row change %, page size and navigation). Providers are switchable in **Settings → Market data source**: *Yahoo Finance* through your own relay (direct calls are CORS-blocked), or *Twelve Data* with a free API key (direct browser calls, no proxy). See [Market data](#market-data) below.
 - **Strategies** — 7-step wizard (type → logic → combination → risk → capital → help → review): MA cross (SMA/EMA), RSI, MACD, Bollinger, S/R breakout, **Trendline** (buy above the rising bullish low-regression line, sell below the falling bearish high-regression line), RSI **level bands** in both directions (long: buy below the oversold level, sell above the overbought level; short: the mirror; or "both" to trade each band in its own direction), with optional pips-based stops/targets and a separate short take-profit; param tooltips and Markdown help docs throughout.
 - **AI Advisor** — offline deterministic recommendations from live market state, plus optional LLM generation (OpenAI-compatible endpoint); ships with AI-created presets such as *Trendline Follower (AI)* and *RSI 30/70 Bracketed (AI)* — buy RSI(14) < 30 with a +0.5% target and a 100-pip stop, short RSI(14) > 70 with a 500-pip target and a 100-pip stop, band signals opening trades only.
 - **Combination engine** — AND consensus, OR, WEIGHTED vote (+threshold), SEQUENTIAL trigger/confirm.
@@ -115,7 +138,7 @@ The previous single-file build relied on a global `GPB` namespace; the modular b
 - **Analysis** — comparison matrix + ranking + radar + equity overlay, **regime heatmap**, scenario analysis on auto-detected bull/bear/sideways segments, parameter optimizer (grid search), risk dashboard.
 - **Automation** — price/MA/RSI alerts with browser notifications, scheduled recurring backtests (tab-open), printable PDF reports, CSV/JSON exports.
 - **Security** — salted SHA-256 (pure JS), session tokens + inactivity timeout, RBAC (ADMIN/ANALYST/VIEWER), login rate limiting (5/min), XSS-escaped rendering, full audit log with rotation + archives, JSON backup/restore.
-- **Quality** — self-test suite (61 assertions, headless-capable) + performance benchmark in Admin → Tests & Benchmark.
+- **Quality** — self-test suite (67 assertions, headless-capable) + performance benchmark in Admin → Tests & Benchmark.
 
 ---
 

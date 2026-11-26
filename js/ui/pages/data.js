@@ -255,12 +255,17 @@ startPage("data", {
       const range = rangeSel.value;
       container.settings.set("yahoo_range", range);
       container.settings.set("yahoo_interval", interval);
-      yhMessage("Fetching " + symbol + " · " + intervalLabel(interval) + " · " + range + " from Yahoo Finance…");
+      const provLabel = container.marketData.provider() === "twelvedata" ? "Twelve Data" : "Yahoo Finance";
+      yhMessage("Fetching " + symbol + " · " + intervalLabel(interval) + " · " + range + " from " + provLabel + "…");
       kit.busy(true, "Fetching " + symbol + "…");
       try {
-        const res = await container.yahoo.fetchChart(symbol, range, interval);
+        const res = await container.marketData.fetchChart(symbol, range, interval);
         kit.busy(false);
-        if (!res.ok) { yhMessage(res.msg || "Yahoo import failed.", false); return null; }
+        if (!res.ok) {
+          yhMessage(res.msg || "Import failed.", false);
+          container.log.add("ERROR", container.actorId(), "DATA_IMPORT", "Download failed for " + symbol + " " + interval + " (" + range + "): " + (res.detail || res.msg));
+          return null;
+        }
         return { symbol, interval: res.interval || interval, range: res.range || range, requested: range, clamped: !!res.clamped, res };
       } catch (e) {
         kit.busy(false);
@@ -317,18 +322,19 @@ startPage("data", {
       const p = await fetchBars();
       if (!p) return;
       const bars = p.res.bars;
+      const srcLabel = p.res.source || (container.marketData.provider() === "twelvedata" ? "Twelve Data" : "Yahoo Finance");
       const storedSym = market.importSymbol(p.symbol, bars, {
-        name: p.symbol + " · " + intervalLabel(p.interval) + " via Yahoo Finance",
-        source: "Yahoo Finance",
+        name: p.symbol + " · " + intervalLabel(p.interval) + " via " + srcLabel,
+        source: srcLabel,
         symbol: p.symbol,
         interval: p.interval,
         range: p.range
       });
       container.settings.set("symbol", storedSym);
       container.settings.set("yahoo_last_at", new Date().toLocaleString("en-GB") + " — " + p.symbol + " " + p.interval + " " + bars.length + " bars");
-      container.log.add("INFO", container.actorId(), "DATA_IMPORT", "Yahoo Finance " + storedSym + " " + p.interval + " (" + p.range + ") → " + bars.length + " bars");
+      container.log.add("INFO", container.actorId(), "DATA_IMPORT", srcLabel + " " + storedSym + " " + p.interval + " (" + p.range + ") → " + bars.length + " bars" + (p.res.note ? " · " + p.res.note : ""));
       yhMessage("");
-      kit.toast("Imported " + bars.length + " " + intervalLabel(p.interval) + " bars for " + p.symbol, "ok", "Yahoo Finance");
+      kit.toast("Imported " + bars.length + " " + intervalLabel(p.interval) + " bars for " + p.symbol, "ok", srcLabel);
       location.reload();
     }
 

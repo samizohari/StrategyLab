@@ -6,16 +6,24 @@
    (full URL with {url} placeholder). */
 "use strict";
 
+/* Route matrix. Each route is distinct (no duplicates) and each failure is labelled
+   so the import error tells the user which path died and what to do about it. */
 const ENCODERS = {
   direct: u => u,
   aoRaw: u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
   aoGet: u => "https://api.allorigins.win/get?url=" + encodeURIComponent(u),
-  aoRaw2: u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
-  aoGet2: u => "https://api.allorigins.win/get?url=" + encodeURIComponent(u),
-  corsproxy: u => "https://corsproxy.io/?url=" + encodeURIComponent(u)
+  codetabs: u => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(u),
+  corsproxy: (u, key) => "https://corsproxy.io/?" + (key ? "key=" + encodeURIComponent(key) + "&" : "") + "url=" + encodeURIComponent(u)
 };
-const ORDER = ["direct", "aoRaw", "aoGet", "aoRaw2", "aoGet2", "corsproxy"];
-const WRAPPED = { aoGet: true, aoGet2: true };
+const LABELS = {
+  direct: "direct (CORS blocked in browsers)",
+  aoRaw: "allorigins raw",
+  aoGet: "allorigins get",
+  codetabs: "codetabs",
+  corsproxy: "corsproxy.io"
+};
+const WRAPPED = { aoGet: true };
+const PUBLIC_ROUTES = ["aoRaw", "aoGet", "codetabs"];
 
 /* Timeframes the UI offers. maxDays is Yahoo's lookback limit for that interval
    (0 = no limit); requesting more returns an error or silently truncates. */
@@ -197,15 +205,28 @@ export class YahooFinanceAdapter {
   }
   _attemptUrls(url) {
     const forced = this.settings.get("yahoo_proxy");
+    const key = this.settings.get("yahoo_proxy_key");
     const list = [];
-    if (forced) list.push({ url: String(forced).replace("{url}", encodeURIComponent(url)), wrap: false });
-    else {
-      ORDER.forEach(k => {
-        list.push({ url: ENCODERS[k](url), wrap: !!WRAPPED[k] });
-        if (k === "direct") list[list.length - 1].note = "direct (CORS blocked in browsers)";
-      });
+    if (forced) {
+      const raw = String(forced);
+      list.push({ url: raw.replace("{url}", encodeURIComponent(url)), wrap: /allorigins\/get/.test(raw), note: "custom relay" });
+    } else {
+      list.push({ url: ENCODERS.direct(url), wrap: false, note: LABELS.direct });
     }
+    PUBLIC_ROUTES.forEach(k => list.push({ url: ENCODERS[k](url), wrap: !!WRAPPED[k], note: LABELS[k] }));
+    if (key) list.push({ url: ENCODERS.corsproxy(url, key), wrap: false, note: LABELS.corsproxy });
     return list;
+  }
+
+  /** Turn the raw route failures into one actionable sentence. */
+  _advice(detail) {
+    if (/HTTP 401/.test(detail)) {
+      return "Yahoo refused the request (HTTP 401) — the free proxy now requires an API key. Add your own relay URL, or switch the provider to Twelve Data, in Settings → Market data source.";
+    }
+    if (/HTTP 429/.test(detail)) {
+      return "Yahoo rate-limited this network (HTTP 429). Wait a few minutes, or switch the provider to Twelve Data in Settings → Market data source.";
+    }
+    return "Could not reach Yahoo Finance from this browser: direct calls are blocked by CORS and the public proxies failed. Add your own relay URL, or switch the provider to Twelve Data, in Settings → Market data source.";
   }
   async _fetchJSON(entry) {
     const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
@@ -241,7 +262,11 @@ export class YahooFinanceAdapter {
         tried.push((entry.note || "proxy") + ":" + (e.message || e));
       }
     }
-    return { ok: false, msg: tried.join(" | "), lastError: lastErr && lastErr.message };
+    const detail = tried.join(" | ");
+    return {
+      ok: false, msg: this._advice(detail), detail, attempts: tried,
+      lastError: lastErr && lastErr.message
+    };
   }
 
   /** fetchChart(symbol, range, interval) — OHLCV import at the chosen timeframe.

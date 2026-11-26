@@ -12,6 +12,8 @@ import { createStrategy } from "../domain/entities.js";
 import { parseLLMJSON } from "../services/ai-provider.js";
 import { parseYahooChart, buildYahooUrl, parseYahooQuotes, YahooFinanceAdapter, FALLBACK_SYMBOLS, clampRange, rangesFor, maxRangeFor, normRange, RANGES } from "../adapters/yahoo-adapter.js";
 import { SymbolRefreshService } from "../services/symbol-refresh.js";
+import { toTwelveSymbol, toTwelveInterval, outputSize, parseTwelveSeries, TwelveDataAdapter } from "../adapters/twelvedata-adapter.js";
+import { MarketDataAdapter } from "../adapters/market-data-adapter.js";
 import { renderMarkdown } from "../ui/md.js";
 import { composeStrategyHelp } from "../domain/help.js";
 
@@ -648,6 +650,71 @@ export function runAll(container) {
     const r2 = await a2.fetchSymbols("gold");
     if (r2.source !== "cache") throw new Error("expected cache, got " + r2.source);
     if (!r2.quotes.length || r2.quotes[0].symbol !== "GC=F") throw new Error("cached quotes wrong");
+  });
+  /* --- market data providers (Yahoo needs a relay; Twelve Data is direct) --- */
+  run("Twelve Data: symbol mapping", () => {
+    const cases = { "GC=F": "XAU/USD", "XAUUSD=X": "XAU/USD", "EURUSD=X": "EUR/USD", "BTC-USD": "BTC/USD", "^GSPC": "SPX", "AUDUSD=X": "AUD/USD" };
+    Object.keys(cases).forEach(k => {
+      const got = toTwelveSymbol(k);
+      if (got !== cases[k]) throw new Error(k + " -> " + got + " (expected " + cases[k] + ")");
+    });
+    if (toTwelveInterval("60m") !== "1h") throw new Error("60m should map to 1h");
+    if (toTwelveInterval("1wk") !== "1week") throw new Error("1wk should map to 1week");
+    if (outputSize("1mo", "1m") !== 5000) throw new Error("intraday range should cap at 5000 bars");
+    if (outputSize("5y", "1d") !== 1300) throw new Error("5y daily should ask for 1300 bars");
+  });
+  run("Twelve Data: parses, sorts and de-duplicates bars", () => {
+    const r = parseTwelveSeries({ meta: { symbol: "XAU/USD" }, values: [
+      { datetime: "2026-01-03", open: "4100.5", high: "4120", low: "4090", close: "4110.25" },
+      { datetime: "2026-01-02", open: "4080", high: "4105", low: "4075", close: "4100.5" },
+      { datetime: "2026-01-02", open: "1", high: "1", low: "1", close: "1" }
+    ] });
+    if (!r.ok || r.count !== 2) throw new Error("count=" + r.count + " " + (r.msg || ""));
+    if (r.bars[0].d !== "2026-01-02") throw new Error("bars not sorted ascending");
+    if (r.bars[1].c !== 4110.25) throw new Error("bad close " + r.bars[1].c);
+  });
+  run("Twelve Data: API errors surface the provider message", () => {
+    const r = parseTwelveSeries({ code: 401, message: "bad key", status: "error" });
+    if (r.ok || !/bad key/.test(r.msg)) throw new Error("expected the provider message, got " + JSON.stringify(r));
+  });
+  run("Yahoo routes: distinct, relay first, corsproxy only when keyed", () => {
+    const mk = map => new YahooFinanceAdapter({ settings: { get: k => (k in map ? map[k] : null) }, fetchFn: async () => { throw new Error("x"); } });
+    const plain = mk({})._attemptUrls("https://example.test/x").map(a => a.note);
+    if (new Set(plain).size !== plain.length) throw new Error("duplicate routes: " + plain.join(", "));
+    if (plain.some(n => /corsproxy/.test(n))) throw new Error("corsproxy must not run without a key");
+    if (!/direct/.test(plain[0])) throw new Error("direct should be first without a relay");
+    const relay = mk({ yahoo_proxy: "https://w.example/?url={url}" })._attemptUrls("https://example.test/x");
+    if (relay[0].note !== "custom relay") throw new Error("relay must be attempted first");
+    const keyed = mk({ yahoo_proxy_key: "abc" })._attemptUrls("https://example.test/x").map(a => a.note);
+    if (!keyed.some(n => /corsproxy/.test(n))) throw new Error("keyed corsproxy missing: " + keyed.join(", "));
+  });
+  run("Download failure gives actionable advice", async () => {
+    const a = new YahooFinanceAdapter({ settings: { get: () => null }, timeoutMs: 1000, fetchFn: async () => ({ ok: false, status: 401, json: async () => ({}) }) });
+    const r = await a.fetchChart("GC=F", "1mo");
+    if (r.ok) throw new Error("download should have failed");
+    if (!/Settings/.test(r.msg)) throw new Error("message is not actionable: " + r.msg);
+    if (!r.detail) throw new Error("route detail missing");
+  });
+  run("Market data: routes to the selected provider, falls back, warns on missing key", async () => {
+    const s1 = { get: k => ({ data_provider: "twelvedata", twelvedata_key: "k" })[k] || null };
+    const yahooFail = { fetchChart: async () => ({ ok: false, msg: "yahoo down" }) };
+    const twelveOk = { fetchChart: async () => ({ ok: true, count: 1, bars: [{ d: "2026-01-02", o: 1, h: 1, l: 1, c: 1, v: 0 }], source: "Twelve Data", provider: "twelvedata" }) };
+    const r1 = await new MarketDataAdapter({ settings: s1, yahoo: yahooFail, twelve: twelveOk }).fetchChart("GC=F", "1mo");
+    if (!r1.ok || r1.provider !== "twelvedata") throw new Error("did not route to Twelve Data");
+
+    const s2 = { get: k => ({ data_provider: "yahoo" })[k] || null };
+    const yahooOk = { fetchChart: async () => ({ ok: true, count: 2, bars: [], provider: "yahoo" }) };
+    const r2 = await new MarketDataAdapter({ settings: s2, yahoo: yahooOk, twelve: twelveOk }).fetchChart("GC=F", "1mo");
+    if (!r2.ok || r2.provider !== "yahoo") throw new Error("did not route to Yahoo");
+
+    const s2b = { get: k => ({ data_provider: "yahoo", twelvedata_key: "k" })[k] || null };
+    const r2b = await new MarketDataAdapter({ settings: s2b, yahoo: yahooFail, twelve: twelveOk }).fetchChart("GC=F", "1mo");
+    if (!r2b.ok || r2b.provider !== "twelvedata") throw new Error("Yahoo failure should fall back to a saved Twelve Data key");
+
+    const s3 = { get: k => ({ data_provider: "twelvedata" })[k] || null };
+    const noKey = new TwelveDataAdapter({ settings: { get: () => "" }, fetchFn: async () => { throw new Error("must not call the network"); } });
+    const r3 = await new MarketDataAdapter({ settings: s3, yahoo: yahooFail, twelve: noKey }).fetchChart("GC=F", "1mo");
+    if (r3.ok || !/API key/.test(r3.msg)) throw new Error("missing-key message wrong: " + r3.msg);
   });
   run("Symbol refresh: stale triggers once, fresh skips", async () => {
     let calls = 0;

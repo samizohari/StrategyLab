@@ -3,7 +3,8 @@
 
 const DEFAULTS = {
   theme: "dark", symbol: "GC=F", idleTimeoutMin: 30, logMaxEntries: 1500, defaultInitialCapital: 10000,
-  defaultRiskPerTrade: 1.5, defaultMaxDailyLoss: 5, resultCap: 20, benchmarkBars: 12000
+  defaultRiskPerTrade: 1.5, defaultMaxDailyLoss: 5, resultCap: 20, benchmarkBars: 12000,
+  data_provider: "yahoo", twelvedata_key: "", yahoo_proxy: "", yahoo_proxy_key: ""
 };
 
 export class SettingsService {

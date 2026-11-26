@@ -47,6 +47,20 @@ startPage("settings", {
     }
     html += "</div>";
 
+    /* 2b · where downloads come from */
+    const prov = settings.get("data_provider") === "twelvedata" ? "twelvedata" : "yahoo";
+    html += '<div class="card" style="margin-top:14px"><h3>Market data source <span class="sub">how OHLCV downloads are fetched</span></h3>' +
+      '<div class="frow">' +
+      '<div class="field"><label>Provider</label><select id="md-prov">' +
+      '<option value="yahoo"' + (prov === "yahoo" ? " selected" : "") + '>Yahoo Finance (needs your own relay)</option>' +
+      '<option value="twelvedata"' + (prov === "twelvedata" ? " selected" : "") + '>Twelve Data (free API key)</option>' +
+      '</select><div class="hint">Browsers cannot reach Yahoo directly (CORS), and the free public proxies now fail or demand keys. Twelve Data allows direct browser calls with a free key.</div></div>' +
+      '<div class="field"><label>Twelve Data API key</label><input id="md-key" type="text" autocomplete="off" spellcheck="false" placeholder="paste your free key" value="' + U.esc(settings.get("twelvedata_key") || "") + '"><div class="hint">Free at twelvedata.com (800 requests/day). Stored only in this browser.</div></div>' +
+      '</div>' +
+      '<div class="frow"><div class="field" style="flex:2"><label>Yahoo relay URL (optional)</label><input id="md-relay" placeholder="https://your-worker.workers.dev/?url={url}" value="' + U.esc(settings.get("yahoo_proxy") || "") + '"><div class="hint">A 20-line Cloudflare Worker (<code>relay/cloudflare-worker.js</code> in the repo) restores Yahoo access. Keep the <code>{url}</code> placeholder.</div></div>' +
+      '<div class="field" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn btn-primary" id="md-save">Save</button> <button class="btn" id="md-test">Test download</button></div></div>' +
+      '<div id="md-status" class="hint" style="margin-top:6px"></div></div>';
+
     /* 3 · pick from Yahoo */
     html += '<div class="card" style="margin-top:14px"><h3>Find a symbol (Yahoo Finance) <span class="sub">fills the selector from Yahoo</span></h3>' +
       '<div class="frow">' +
@@ -107,6 +121,48 @@ startPage("settings", {
       view.querySelectorAll("[data-theme]").forEach(x => x.classList.remove("gold-on"));
       c.classList.add("gold-on");
     }));
+
+    /* --- market data source --- */
+    function saveMarketData() {
+      const p = document.getElementById("md-prov").value;
+      const key = document.getElementById("md-key").value.trim();
+      const relay = document.getElementById("md-relay").value.trim();
+      settings.set("data_provider", p);
+      settings.set("twelvedata_key", key);
+      settings.set("yahoo_proxy", relay);
+      container.log.add("INFO", container.actorId(), "SETTINGS", "Market data provider → " + p +
+        (relay ? " (custom relay set)" : "") + (key ? " (Twelve Data key saved)" : ""));
+      return { p, key, relay };
+    }
+    document.getElementById("md-save").addEventListener("click", () => {
+      saveMarketData();
+      kit.toast("Market data settings saved", "ok", "Settings");
+    });
+    document.getElementById("md-test").addEventListener("click", async () => {
+      saveMarketData();
+      const el = document.getElementById("md-status");
+      el.className = "hint";
+      el.textContent = "Testing " + active + " (1 month)…";
+      kit.busy(true, "Testing the data source…");
+      let r;
+      try {
+        r = await container.marketData.fetchChart(active, "1mo");
+      } catch (e) {
+        r = { ok: false, msg: (e && e.message) || "Download failed." };
+      }
+      kit.busy(false);
+      if (r.ok) {
+        el.className = "hint";
+        el.innerHTML = "OK · <b>" + U.esc(r.source || r.provider) + "</b> · " + r.count + " bars · " +
+          U.esc(r.bars[0].d) + " → " + U.esc(r.bars[r.bars.length - 1].d) +
+          (r.note ? " · " + U.esc(r.note) : "");
+        container.log.add("INFO", container.actorId(), "DATA_TEST", "Download test ok via " + (r.provider || "?") + ": " + r.count + " bars");
+      } else {
+        el.className = "err-msg";
+        el.innerHTML = U.esc(r.msg) + (r.detail ? '<div class="hint" style="margin-top:4px">Routes tried: ' + U.esc(r.detail) + "</div>" : "");
+        container.log.add("ERROR", container.actorId(), "DATA_TEST", "Download test failed: " + (r.detail || r.msg));
+      }
+    });
 
     /* --- yahoo symbol search --- */
     function renderQuotes(quotes) {
