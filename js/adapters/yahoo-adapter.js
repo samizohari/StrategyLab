@@ -107,7 +107,9 @@ export function clampRange(range, interval) {
 }
 
 export function buildYahooUrl(symbol, range, interval) {
-  const sym = encodeURIComponent(String(symbol || "GC=F").trim());
+  const sym = encodeURIComponent(String(symbol || "GC=F").trim())
+    .replace(/%3D/gi, "=")    // GC=F, EURUSD=X
+    .replace(/%5E/gi, "^");   // ^GSPC
   const iv = normInterval(interval);
   const rng = normRange(range);
   return "https://query1.finance.yahoo.com/v8/finance/chart/" + sym +
@@ -167,13 +169,48 @@ export function parseYahooQuotes(data) {
   return { ok: true, quotes: out };
 }
 
+/** data/<symbol>.json — repo-relative snapshot path (also used by tools/snapshot.mjs). */
+export function snapshotPath(symbol) {
+  return "data/" + String(symbol || "GC=F").trim().replace(/[^A-Za-z0-9._-]/g, "_") + ".json";
+}
+
+/** Site-root URL for the snapshot, so it resolves from /pages/*.html too. */
+export function snapshotUrl(symbol) {
+  const p = snapshotPath(symbol);
+  try {
+    const dir = location.pathname.replace(/[^/]*$/, "");        // .../pages/
+    return (/\/pages\/$/.test(dir) ? dir.replace(/pages\/$/, "") : dir) + p;
+  } catch (e) { return p; }   // Node/tools
+}
+
+/** Pure parser: { symbol, fetchedAt, bars:[{d,o,h,l,c,v}] } written by tools/snapshot.mjs.
+ *  Keeps `d` verbatim so intraday labels would survive too. */
+export function parseSnapshot(data) {
+  if (!data || !Array.isArray(data.bars) || !data.bars.length) return { ok: false, msg: "snapshot has no bars" };
+  const bars = [];
+  const seen = {};
+  for (const b of data.bars) {
+    if (!b || !b.d) continue;
+    const o = +b.o, h = +b.h, l = +b.l, c = +b.c;
+    if (![o, h, l, c].every(isFinite)) continue;
+    const d = String(b.d);
+    if (seen[d]) continue;
+    seen[d] = 1;
+    bars.push({ d, o, h, l, c, v: +b.v || 0 });
+  }
+  if (!bars.length) return { ok: false, msg: "snapshot bars were all invalid" };
+  bars.sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
+  return {
+    ok: true, bars, count: bars.length,
+    meta: { symbol: data.symbol, snapshotAt: data.fetchedAt, regularMarketPrice: bars[bars.length - 1].c }
+  };
+}
+
 /** Curated Yahoo symbols used when the search API is unreachable (dropdown stays filled). */
 export const FALLBACK_SYMBOLS = [
   { symbol: "GC=F", name: "Gold", exchange: "CMX" },
-  { symbol: "XAUUSD=X", name: "Gold Spot / USD", exchange: "CCY" },
-  { symbol: "XAU=X", name: "Gold (London)", exchange: "CCY" },
+  { symbol: "MGC=F", name: "Micro Gold Futures", exchange: "CMX" },
   { symbol: "SI=F", name: "Silver", exchange: "CMX" },
-  { symbol: "XAGUSD=X", name: "Silver Spot / USD", exchange: "CCY" },
   { symbol: "PL=F", name: "Platinum", exchange: "NYM" },
   { symbol: "PA=F", name: "Palladium", exchange: "NYM" },
   { symbol: "CL=F", name: "Crude Oil WTI", exchange: "NYM" },
@@ -191,8 +228,7 @@ export const FALLBACK_SYMBOLS = [
   { symbol: "^IXIC", name: "Nasdaq Composite", exchange: "PCX" },
   { symbol: "^DJI", name: "Dow Jones", exchange: "DJI" },
   { symbol: "GLD", name: "SPDR Gold Shares", exchange: "PCX" },
-  { symbol: "SLV", name: "iShares Silver Trust", exchange: "PCX" },
-  { symbol: "MGC=F", name: "Micro Gold Futures", exchange: "CMX" }
+  { symbol: "SLV", name: "iShares Silver Trust", exchange: "PCX" }
 ];
 
 export class YahooFinanceAdapter {
@@ -230,7 +266,7 @@ export class YahooFinanceAdapter {
     if (/HTTP 429/.test(detail)) {
       return "Yahoo rate-limited this network (HTTP 429). Wait a few minutes, or switch the provider to Twelve Data in Settings → Market data source.";
     }
-    return "Could not reach Yahoo Finance from this browser: direct calls are blocked by CORS and the public proxies failed. Add your own relay URL, or switch the provider to Twelve Data, in Settings → Market data source.";
+    return "Could not reach Yahoo Finance from this browser: its API sends no CORS header, so direct calls are always blocked, and the public proxies failed. Add your own relay URL, switch the provider to Twelve Data in Settings → Market data source, or run the \"Yahoo data snapshot\" workflow to publish the bundled daily snapshot.";
   }
   async _fetchJSON(entry) {
     const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
@@ -296,11 +332,35 @@ export class YahooFinanceAdapter {
     };
   }
 
+  /** Read the committed daily snapshot (same-origin: no CORS, no proxy, no key). */
+  async _snapshot(symbol) {
+    const url = snapshotUrl(symbol);
+    try {
+      const { data } = await this._fetchJSON({ url, wrap: false, timeout: 8000 });
+      const parsed = parseSnapshot(data);
+      if (!parsed.ok) return parsed;
+      parsed.source = "Yahoo Finance (site snapshot)";
+      parsed.route = "site snapshot";
+      parsed.snapshotAt = data.fetchedAt || null;
+      return parsed;
+    } catch (e) {
+      return { ok: false, msg: "no snapshot at " + url };
+    }
+  }
+
   /** fetchChart(symbol, range, interval) — OHLCV import at the chosen timeframe.
+   *  Daily imports use the bundled snapshot first; other timeframes go live.
    *  The range is clamped to what Yahoo serves for that interval (e.g. 15m -> 1mo). */
   async fetchChart(symbol, range, interval) {
     const iv = normInterval(interval);
     const cl = clampRange(range, iv);
+    if (iv === "1d") {
+      const snap = await this._snapshot(symbol);
+      if (snap.ok) {
+        snap.interval = iv; snap.range = cl.range; snap.requestedRange = range; snap.clamped = cl.clamped;
+        return snap;
+      }
+    }
     const res = await this._request(buildYahooUrl(symbol, cl.range, iv), d => parseYahooChart(d, iv));
     if (res.ok) {
       res.interval = iv;

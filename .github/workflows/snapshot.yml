@@ -1,0 +1,59 @@
+name: Yahoo data snapshot
+
+# Yahoo's chart API sends no CORS headers, so a static page can never call it directly.
+# This job fetches the data server-side and commits it to data/, which the app reads
+# from its own origin (no proxy, no CORS). Runs daily; also on demand.
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+    inputs:
+      symbols:
+        description: "Comma-separated Yahoo symbols (blank = default set)"
+        required: false
+      range:
+        description: "History window (1y, 2y, 5y, 10y, max)"
+        required: false
+        default: "10y"
+  push:
+    paths:
+      - "tools/snapshot.mjs"
+      - ".github/workflows/snapshot.yml"
+      - "package.json"
+      - "js/adapters/yahoo-adapter.js"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: yahoo-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Fetch Yahoo bars
+        env:
+          SYMBOLS: ${{ inputs.symbols }}
+          RANGE: ${{ inputs.range }}
+        run: node tools/snapshot.mjs
+
+      - name: Commit snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --staged --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "data: Yahoo snapshot $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi

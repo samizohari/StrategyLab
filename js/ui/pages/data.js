@@ -19,8 +19,8 @@ startPage("data", {
     const yhLast = container.settings.get("yahoo_last_at");
     html += '<div class="card" style="margin-bottom:14px"><h3>Yahoo Finance <span class="sub">live OHLCV import · pick symbol, timeframe and history</span></h3>' +
       '<div class="frow">' +
-      '<div class="field" style="flex:2"><label>Symbol</label><input id="yh-sym" list="yh-syms" value="' + U.esc(yhSym) + '" placeholder="GC=F"><datalist id="yh-syms"><option value="GC=F"><option value="XAUUSD=X"><option value="XAU=X"><option value="SI=F"><option value="CL=F"><option value="ES=F"></datalist>' +
-      '<div class="hint">GC=F gold futures · XAUUSD=X spot · any Yahoo symbol. The import replaces the dataset for this symbol and makes it the active symbol.</div></div>' +
+      '<div class="field" style="flex:2"><label>Symbol</label><input id="yh-sym" list="yh-syms" value="' + U.esc(yhSym) + '" placeholder="GC=F"><datalist id="yh-syms"><option value="GC=F"><option value="MGC=F"><option value="GLD"><option value="SI=F"><option value="CL=F"><option value="ES=F"></datalist>' +
+      '<div class="hint">GC=F gold futures · MGC=F micro gold · GLD gold ETF · any Yahoo symbol. The import replaces the dataset for this symbol and makes it the active symbol.</div></div>' +
       '<div class="field" style="flex:0 0 140px"><label>Timeframe</label><select id="yh-int">' +
       INTERVALS.map(o => '<option value="' + o.value + '"' + (yhInt === o.value ? " selected" : "") + ">" + o.label + "</option>").join("") + "</select></div>" +
       '<div class="field" style="flex:0 0 140px"><label>History</label><select id="yh-range"></select><div class="hint" id="yh-lim"></div></div>' +

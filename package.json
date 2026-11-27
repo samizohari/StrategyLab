@@ -1,0 +1,11 @@
+{
+  "name": "strategylab",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-only strategy backtesting app; this manifest only marks the JS as ES modules for Node tooling.",
+  "scripts": {
+    "snapshot": "node tools/snapshot.mjs",
+    "test": "node tools/selftest.mjs"
+  }
+}

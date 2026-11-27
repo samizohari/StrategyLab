@@ -10,7 +10,7 @@ import { computeMetrics, periodsPerYear } from "../domain/metrics.js";
 import { U } from "../core/utils.js";
 import { createStrategy } from "../domain/entities.js";
 import { parseLLMJSON } from "../services/ai-provider.js";
-import { parseYahooChart, buildYahooUrl, parseYahooQuotes, YahooFinanceAdapter, FALLBACK_SYMBOLS, clampRange, rangesFor, maxRangeFor, normRange, RANGES } from "../adapters/yahoo-adapter.js";
+import { parseYahooChart, buildYahooUrl, parseYahooQuotes, parseSnapshot, snapshotPath, YahooFinanceAdapter, FALLBACK_SYMBOLS, clampRange, rangesFor, maxRangeFor, normRange, RANGES } from "../adapters/yahoo-adapter.js";
 import { SymbolRefreshService } from "../services/symbol-refresh.js";
 import { toTwelveSymbol, toTwelveInterval, outputSize, parseTwelveSeries, TwelveDataAdapter } from "../adapters/twelvedata-adapter.js";
 import { MarketDataAdapter } from "../adapters/market-data-adapter.js";
@@ -437,7 +437,9 @@ export function runAll(container) {
   });
   run("Yahoo url builder", () => {
     const u = buildYahooUrl("GC=F", "2y", "1d");
-    if (u.indexOf("GC%3DF") < 0 || u.indexOf("range=730d") < 0) throw new Error(u);
+    if (u.indexOf("/chart/GC=F?") < 0 || u.indexOf("range=730d") < 0) throw new Error(u);
+    if (u.indexOf("%3D") >= 0) throw new Error("symbol must not be percent-encoded: " + u);
+    if (buildYahooUrl("^GSPC", "2y", "1d").indexOf("/chart/^GSPC?") < 0) throw new Error("caret symbol encoding");
     if (buildYahooUrl("X", "bogus", "1d").indexOf("range=730d") < 0) throw new Error("bad range fallback");
   });
   run("Yahoo timeframe: url, range clamp and dropdown options", () => {
@@ -744,6 +746,54 @@ export function runAll(container) {
     if (!r1.ok || calls !== 1) throw new Error("stale cache should refresh once (calls=" + calls + ")");
     const r2 = await svc.maybeRefresh(24);
     if (!r2.skipped || calls !== 1) throw new Error("fresh cache must skip (calls=" + calls + ")");
+  });
+  run("Snapshot: reads the committed daily file", () => {
+    const p = parseSnapshot({ symbol: "GC=F", fetchedAt: "2026-10-20T05:17:00Z",
+      bars: [{ d: "2026-10-19", o: 1, h: 2, l: 0.5, c: 1.5, v: 10 }, { d: "2026-10-18", o: 1, h: 2, l: 0.5, c: 1.2, v: 9 }] });
+    if (!p.ok || p.count !== 2) throw new Error("parse failed: " + (p.msg || ""));
+    if (p.bars[0].d !== "2026-10-18") throw new Error("bars not sorted");
+    if (p.meta.snapshotAt !== "2026-10-20T05:17:00Z") throw new Error("snapshot timestamp lost");
+    if (parseSnapshot({ bars: [] }).ok) throw new Error("empty snapshot accepted");
+    if (parseSnapshot(null).ok) throw new Error("null snapshot accepted");
+    if (parseSnapshot({ bars: [{ d: "x", o: "a" }] }).ok) throw new Error("invalid bars accepted");
+    if (snapshotPath("GC=F") !== "data/GC_F.json") throw new Error(snapshotPath("GC=F"));
+    if (snapshotPath("^GSPC") !== "data/_GSPC.json") throw new Error(snapshotPath("^GSPC"));
+  });
+  run("Snapshot: daily import uses the same-origin file, no proxy", async () => {
+    const calls = [];
+    const y = new YahooFinanceAdapter({ settings: { get: () => null, set() {} }, fetchFn: async (url) => {
+      calls.push(url);
+      if (String(url).indexOf("data/") >= 0) {
+        return { ok: true, status: 200, json: async () => ({ symbol: "GC=F", fetchedAt: "2026-10-20T05:17:00Z", bars: [{ d: "2026-10-19", o: 1, h: 2, l: 0.5, c: 1.5, v: 1 }] }) };
+      }
+      throw new Error("network blocked");
+    } });
+    const r = await y.fetchChart("GC=F", "5y", "1d");
+    if (!r.ok) throw new Error(r.msg);
+    if (calls.length !== 1) throw new Error("made " + calls.length + " requests, expected 1 (snapshot only)");
+    if (!/snapshot/.test(r.source)) throw new Error("source=" + r.source);
+    if (!r.snapshotAt) throw new Error("snapshot time missing");
+  });
+  run("Snapshot: intraday still goes live (no daily file)", async () => {
+    const calls = [];
+    const y = new YahooFinanceAdapter({ settings: { get: () => null, set() {} }, fetchFn: async (url) => {
+      calls.push(url);
+      if (String(url).indexOf("/v8/finance/chart/") >= 0 && String(url).indexOf("interval=15m") >= 0) {
+        return { ok: true, status: 200, json: async () => ({ chart: { result: [{ meta: {}, timestamp: [1700000000], indicators: { quote: [{ open: [1], high: [2], low: [0.5], close: [1.5], volume: [3] }] } }] } }) };
+      }
+      throw new Error("blocked");
+    } });
+    const r = await y.fetchChart("GC=F", "30d", "15m");
+    if (!r.ok) throw new Error(r.msg);
+    if (calls.some(c => String(c).indexOf("data/") >= 0)) throw new Error("intraday must not read the daily snapshot");
+  });
+  run("Snapshot: failure names CORS, the snapshot and the fallbacks", async () => {
+    const y = new YahooFinanceAdapter({ settings: { get: () => null, set() {} }, fetchFn: async () => { throw new TypeError("Failed to fetch"); } });
+    const r = await y.fetchChart("GC=F", "5y", "1d");
+    if (r.ok) throw new Error("should fail");
+    if (!/CORS/.test(r.msg)) throw new Error("message not actionable: " + r.msg);
+    if (!/snapshot/i.test(r.msg)) throw new Error("message should mention the snapshot: " + r.msg);
+    if (!r.detail) throw new Error("no route detail for debugging");
   });
   run("Rate limiting: lock after 5 fails", () => {
     for (let i = 0; i < 5; i++) container.auth.login("viewer", "wrongpass1");

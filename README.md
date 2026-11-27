@@ -117,6 +117,14 @@ free public CORS proxies that used to make this work are now dead, rate-limited,
    as a Cloudflare Worker (free, ~2 minutes, no CLI), then paste its URL into **Yahoo relay URL** with the
    `{url}` placeholder kept: `https://<worker>.workers.dev/?url={url}`.
 
+3. **Bundled snapshot (zero setup, daily bars).** `.github/workflows/snapshot.yml` runs
+   [`tools/snapshot.mjs`](tools/snapshot.mjs) server-side (no CORS) every day at 05:17 UTC and commits
+   `data/<symbol>.json` + `data/index.json` back to the repo. Daily imports read that file from the app's
+   own origin first, so they need no relay, no proxy and no API key. Refresh or add symbols with
+   **Actions → Yahoo data snapshot → Run workflow** (`symbols`, `range` inputs), or locally:
+   `node tools/snapshot.mjs "GC=F,XAU…" 10y`. Intraday timeframes skip the snapshot (it holds daily bars)
+   and use the paths above.
+
 **Settings → Market data source → Test download** runs a real one-month request for the active symbol and
 reports which provider answered (or the exact route failures). If Yahoo fails while a Twelve Data key is
 saved, the app automatically falls back to Twelve Data, and vice-versa.

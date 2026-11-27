@@ -1,0 +1,62 @@
+{
+  "generatedAt": "2026-11-27T09:57:43.305Z",
+  "range": "10y",
+  "symbols": [
+    {
+      "symbol": "GC=F",
+      "file": "GC_F.json",
+      "count": 3020,
+      "first": "2014-11-24",
+      "last": "2026-11-27"
+    },
+    {
+      "symbol": "MGC=F",
+      "file": "MGC_F.json",
+      "count": 3021,
+      "first": "2014-11-24",
+      "last": "2026-11-27"
+    },
+    {
+      "symbol": "GLD",
+      "file": "GLD.json",
+      "count": 3650,
+      "first": "2012-05-22",
+      "last": "2026-11-25"
+    },
+    {
+      "symbol": "SI=F",
+      "file": "SI_F.json",
+      "count": 3019,
+      "first": "2014-11-24",
+      "last": "2026-11-27"
+    },
+    {
+      "symbol": "CL=F",
+      "file": "CL_F.json",
+      "count": 3020,
+      "first": "2014-11-24",
+      "last": "2026-11-27"
+    },
+    {
+      "symbol": "ES=F",
+      "file": "ES_F.json",
+      "count": 3021,
+      "first": "2014-11-24",
+      "last": "2026-11-27"
+    },
+    {
+      "symbol": "BTC-USD",
+      "file": "BTC-USD.json",
+      "count": 3650,
+      "first": "2016-11-30",
+      "last": "2026-11-27"
+    },
+    {
+      "symbol": "EURUSD=X",
+      "file": "EURUSD_X.json",
+      "count": 3640,
+      "first": "2012-12-03",
+      "last": "2026-11-27"
+    }
+  ]
+}
